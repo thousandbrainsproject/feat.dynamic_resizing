@@ -409,50 +409,90 @@ class EvidenceSlopeTracker:
         if channel in self.evidence_buffer:
             self.remove_hyp(np.arange(self.total_size(channel)), channel)
 
-    def calculate_keep_and_remove_ids(
-        self, num_keep: int, channel: str
-    ) -> tuple[npt.NDArray[np.int_], npt.NDArray[np.int_]]:
-        """Determines which hypotheses to keep and which to remove in a channel.
+    def select_hypotheses(
+        self, slope_threshold: float, channel: str
+    ) -> HypothesesSelection:
+        """Returns a hypotheses selection given a slope threshold.
 
-        Hypotheses with the lowest average slope are selected for removal.
+        A hypothesis is maintained if:
+          - Its slope is > the threshold, OR
+          - It is not yet removable due to age.
 
         Args:
-            num_keep: Requested number of hypotheses to retain.
+            slope_threshold: Minimum slope value to keep a removable hypothesis.
             channel: Name of the input channel.
 
         Returns:
-            - to_keep: Indices of hypotheses to retain.
-            - to_remove: Indices of hypotheses to remove.
+            The number of hypotheses to maintain.
 
         Raises:
             ValueError: If the channel does not exist.
-            ValueError: If the requested hypotheses to retain are more than available
-                hypotheses.
         """
         if channel not in self.evidence_buffer:
             raise ValueError(f"Channel '{channel}' does not exist.")
 
-        total_size = self.total_size(channel)
-        if num_keep > total_size:
-            raise ValueError(
-                f"Cannot keep {num_keep} hypotheses; only {total_size} exist."
-            )
-        total_ids = np.arange(total_size)
-        num_remove = total_size - num_keep
-
-        # Retrieve valid slopes and sort them
-        removable_mask = self.removable_indices_mask(channel)
         slopes = self._calculate_slopes(channel)
-        removable_slopes = slopes[removable_mask]
-        removable_ids = total_ids[removable_mask]
-        sorted_indices = np.argsort(removable_slopes)
+        removable_mask = self.removable_indices_mask(channel)
 
-        # Calculate which ids to keep and which to remove
-        to_remove = removable_ids[sorted_indices[:num_remove]]
-        to_remove_mask = np.zeros(total_size, dtype=bool)
-        to_remove_mask[to_remove] = True
-        to_keep = total_ids[~to_remove_mask]
-        return to_keep, to_remove
+        maintain_mask = (slopes > slope_threshold) | (~removable_mask)
+
+        return HypothesesSelection.from_maintain_mask(maintain_mask)
+
+
+class HypothesesSelection:
+    def __init__(self, maintain_mask: npt.ArrayLike) -> None:
+        self._maintain_mask = np.asarray(maintain_mask, dtype=bool)
+
+    @classmethod
+    def from_maintain_mask(cls, mask: npt.ArrayLike) -> HypothesesSelection:
+        return cls(mask)
+
+    @classmethod
+    def from_remove_mask(cls, mask: npt.ArrayLike) -> HypothesesSelection:
+        return cls(~np.asarray(mask, dtype=bool))
+
+    @classmethod
+    def from_maintain_ids(
+        cls, total_size: int, ids: npt.ArrayLike
+    ) -> HypothesesSelection:
+        mm = np.zeros(int(total_size), dtype=bool)
+        idx = np.asarray(ids, dtype=int)
+        if idx.size:
+            if idx.min() < 0 or idx.max() >= total_size:
+                raise IndexError(f"maintain_ids outside [0, {total_size})")
+            mm[np.unique(idx)] = True
+        return cls(mm)
+
+    @classmethod
+    def from_remove_ids(
+        cls, total_size: int, ids: npt.ArrayLike
+    ) -> HypothesesSelection:
+        mm = np.ones(int(total_size), dtype=bool)
+        idx = np.asarray(ids, dtype=int)
+        if idx.size:
+            if idx.min() < 0 or idx.max() >= total_size:
+                raise IndexError(f"remove_ids outside [0, {total_size})")
+            mm[np.unique(idx)] = False
+        return cls(mm)
+
+    @property
+    def maintain_mask(self) -> npt.NDArray[np.bool_]:
+        return self._maintain_mask
+
+    @property
+    def remove_mask(self) -> npt.NDArray[np.bool_]:
+        return ~self._maintain_mask
+
+    @property
+    def maintain_ids(self) -> npt.NDArray[np.int_]:
+        return np.flatnonzero(self._maintain_mask).astype(int)
+
+    @property
+    def remove_ids(self) -> npt.NDArray[np.int_]:
+        return np.flatnonzero(~self._maintain_mask).astype(int)
+
+    def __len__(self) -> int:
+        return int(self._maintain_mask.size)
 
 
 def evidence_update_threshold(
