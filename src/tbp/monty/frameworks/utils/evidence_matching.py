@@ -415,7 +415,7 @@ class EvidenceSlopeTracker:
         """Returns a hypotheses selection given a slope threshold.
 
         A hypothesis is maintained if:
-          - Its slope is > the threshold, OR
+          - Its slope is >= the threshold, OR
           - It is not yet removable due to age.
 
         Args:
@@ -434,64 +434,133 @@ class EvidenceSlopeTracker:
         slopes = self._calculate_slopes(channel)
         removable_mask = self.removable_indices_mask(channel)
 
-        maintain_mask = (slopes > slope_threshold) | (~removable_mask)
+        maintain_mask = (slopes >= slope_threshold) | (~removable_mask)
 
-        return HypothesesSelection.from_maintain_mask(maintain_mask)
+        return HypothesesSelection(maintain_mask)
 
 
 class HypothesesSelection:
-    def __init__(self, maintain_mask: npt.ArrayLike) -> None:
+    """Encapsulates the selection of hypotheses to maintain or remove.
+
+    This class stores a boolean mask indicating which hypotheses should be maintained.
+    From this mask, it can return the indices and masks for both the maintained and
+    removed hypotheses. It also provides convenience constructors for creating a
+    selection from maintain/remove masks or from maintain/remove index lists.
+
+    Attributes:
+        _maintain_mask: Boolean mask of shape (N,) where True indicates a maintain
+            hypothesis and False indicates a remove hypothesis.
+    """
+
+    def __init__(self, maintain_mask: npt.NDArray[np.bool_]) -> None:
+        """Initializes a HypothesesSelection from a maintain mask.
+
+        Args:
+            maintain_mask: Boolean array-like of shape (N,) where True indicates a
+                maintained hypothesis and False indicates a removed hypothesis.
+        """
         self._maintain_mask = np.asarray(maintain_mask, dtype=bool)
 
     @classmethod
-    def from_maintain_mask(cls, mask: npt.ArrayLike) -> HypothesesSelection:
+    def from_maintain_mask(cls, mask: npt.NDArray[np.bool_]) -> HypothesesSelection:
+        """Creates a selection from a maintain mask.
+
+        Args:
+            mask: Boolean array-like where True indicates a maintained hypothesis.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Note:
+            This method is added from completeness, but it is redundant as it calls the
+            default class `__init__` function.
+        """
         return cls(mask)
 
     @classmethod
-    def from_remove_mask(cls, mask: npt.ArrayLike) -> HypothesesSelection:
-        return cls(~np.asarray(mask, dtype=bool))
+    def from_remove_mask(cls, mask: npt.NDArray[np.bool_]) -> HypothesesSelection:
+        """Creates a hypotheses selection from a remove mask.
+
+        Args:
+            mask: Boolean array-like where True indicates a hypothesis to remove.
+
+        Returns:
+            A HypothesesSelection instance.
+        """
+        return cls(~mask)
 
     @classmethod
     def from_maintain_ids(
-        cls, total_size: int, ids: npt.ArrayLike
+        cls, total_size: int, ids: npt.NDArray[np.int_]
     ) -> HypothesesSelection:
-        mm = np.zeros(int(total_size), dtype=bool)
-        idx = np.asarray(ids, dtype=int)
-        if idx.size:
-            if idx.min() < 0 or idx.max() >= total_size:
+        """Creates a hypotheses selection from maintain indices.
+
+        Args:
+            total_size: Total number of hypotheses.
+            ids: Indices of hypotheses to maintain.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Raises:
+            IndexError: If any index is out of range [0, total_size).
+        """
+        mask = np.zeros(int(total_size), dtype=bool)
+
+        if ids.size:
+            if ids.min() < 0 or ids.max() >= total_size:
                 raise IndexError(f"maintain_ids outside [0, {total_size})")
-            mm[np.unique(idx)] = True
-        return cls(mm)
+            mask[np.unique(ids)] = True
+
+        return cls(mask)
 
     @classmethod
     def from_remove_ids(
-        cls, total_size: int, ids: npt.ArrayLike
+        cls, total_size: int, ids: npt.NDArray[np.int_]
     ) -> HypothesesSelection:
-        mm = np.ones(int(total_size), dtype=bool)
-        idx = np.asarray(ids, dtype=int)
-        if idx.size:
-            if idx.min() < 0 or idx.max() >= total_size:
+        """Creates a selection from remove indices.
+
+        Args:
+            total_size: Total number of hypotheses.
+            ids: Indices of hypotheses to remove.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Raises:
+            IndexError: If any index is out of range [0, total_size).
+        """
+        mask = np.ones(int(total_size), dtype=bool)
+
+        if ids.size:
+            if ids.min() < 0 or ids.max() >= total_size:
                 raise IndexError(f"remove_ids outside [0, {total_size})")
-            mm[np.unique(idx)] = False
-        return cls(mm)
+            mask[np.unique(ids)] = False
+
+        return cls(mask)
 
     @property
     def maintain_mask(self) -> npt.NDArray[np.bool_]:
+        """Returns the maintain mask."""
         return self._maintain_mask
 
     @property
     def remove_mask(self) -> npt.NDArray[np.bool_]:
+        """Returns the remove mask."""
         return ~self._maintain_mask
 
     @property
     def maintain_ids(self) -> npt.NDArray[np.int_]:
+        """Returns the indices of maintained hypotheses."""
         return np.flatnonzero(self._maintain_mask).astype(int)
 
     @property
     def remove_ids(self) -> npt.NDArray[np.int_]:
+        """Returns the indices of removed hypotheses."""
         return np.flatnonzero(~self._maintain_mask).astype(int)
 
     def __len__(self) -> int:
+        """Returns the total number of hypotheses in the selection."""
         return int(self._maintain_mask.size)
 
 

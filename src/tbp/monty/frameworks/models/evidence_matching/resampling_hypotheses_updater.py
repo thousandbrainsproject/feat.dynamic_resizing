@@ -57,22 +57,13 @@ class ResamplingHypothesesUpdater:
     hypothesis space, as well as new hypotheses informed by the sensed pose.
 
     The resampling process is governed by two main parameters:
-      - `hypotheses_count_multiplier`: scales the total number of hypotheses every step.
-      - `hypotheses_existing_to_new_ratio`: controls the proportion of existing vs.
-          informed hypotheses during resampling.
+      - `resampling_multiplier`: Determines the number of the hypotheses to resample
+        as a multiplier of the object graph nodes.
+      - `evidence_slope_threshold`: Hypotheses below this threshold are deleted.
 
     To reproduce the behavior of `DefaultHypothesesUpdater` sampling a fixed number of
     hypotheses only at the beginning of the episode, you can set
-    `hypotheses_count_multiplier=1.0` and `hypotheses_existing_to_new_ratio=0.0`.
-
-    Note:
-        It would be better to decouple the amount of hypotheses added from the amount
-        deleted in each step. At the moment, this is decided by the
-        `hypotheses_count_multiplier`. For example, when the multiplier is set to 1.0,
-        the hypotheses sampled is equal to the hypotheses removed. We ideally can
-        decouple theses then use a slope threshold to decide on which hypotheses to
-        remove, and use prediction error or other heuristics to decide to how many
-        hypotheses to resample.
+    `resampling_multiplier=0.0` and `evidence_slope_threshold=-1.0`.
     """
 
     def __init__(
@@ -88,8 +79,8 @@ class ResamplingHypothesesUpdater:
         features_for_matching_selector: Type[FeaturesForMatchingSelector] = (
             DefaultFeaturesForMatchingSelector
         ),
-        hypotheses_count_multiplier: float = 1.0,
-        hypotheses_existing_to_new_ratio: float = 0.1,
+        resampling_multiplier: float = 0.1,
+        evidence_slope_threshold: float = 0.0,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",
         max_nneighbors: int = 3,
@@ -118,11 +109,11 @@ class ResamplingHypothesesUpdater:
             features_for_matching_selector: Class to
                 select if features should be used for matching. Defaults to the default
                 selector.
-            hypotheses_count_multiplier: Scales the total number of hypotheses
-                every step. Defaults to 1.0.
-            hypotheses_existing_to_new_ratio: Controls the proportion of the
-                existing vs. newly sampled hypotheses during resampling. Defaults to
-                0.0.
+            resampling_multiplier: Determines the number of the hypotheses to resample
+                as a multiplier of the object graph nodes. Value of 0.0 results in no
+                resampling. Defaults to 0.1.
+            evidence_slope_threshold: Hypotheses below this threshold are deleted.
+                Defaults to 0.0.
             initial_possible_poses: Initial
                 possible poses that should be tested for. Defaults to "informed".
             max_nneighbors: Maximum number of nearest neighbors to consider in the
@@ -147,14 +138,12 @@ class ResamplingHypothesesUpdater:
         self.feature_evidence_increment = feature_evidence_increment
         self.feature_weights = feature_weights
         self.features_for_matching_selector = features_for_matching_selector
+        self.resampling_multiplier = resampling_multiplier
+        self.evidence_slope_threshold = evidence_slope_threshold
         self.graph_memory = graph_memory
         self.initial_possible_poses = get_initial_possible_poses(initial_possible_poses)
         self.tolerances = tolerances
         self.umbilical_num_poses = umbilical_num_poses
-
-        # testing
-        self.step_resample_count = 0.1
-        self.evidence_slope_threshold = 0.0
 
         self.use_features_for_matching = self.features_for_matching_selector.select(
             feature_evidence_increment=self.feature_evidence_increment,
@@ -173,15 +162,8 @@ class ResamplingHypothesesUpdater:
             use_features_for_matching=self.use_features_for_matching,
         )
 
-        # Controls the shrinking or growth of hypothesis space size
-        # Cannot be less than 0
-        self.hypotheses_count_multiplier = max(0, hypotheses_count_multiplier)
-
-        # Controls the ratio of existing to newly sampled hypotheses
-        # Bounded between 0 and 1
-        self.hypotheses_existing_to_new_ratio = max(
-            0, min(hypotheses_existing_to_new_ratio, 1)
-        )
+        # resampling multiplier should not be less than 0 (no resampling)
+        self.resampling_multiplier = max(0, resampling_multiplier)
 
         # Dictionary of slope trackers, one for each graph_id
         self.evidence_slope_trackers: dict[str, EvidenceSlopeTracker] = {}
@@ -323,16 +305,16 @@ class ResamplingHypothesesUpdater:
                 graph_id
 
         Returns:
-            A tuple containing the number of existing and new hypotheses needed.
-            Existing hypotheses are maintained from existing ones while new hypotheses
-            will be initialized, informed by pose sensory information.
+            A tuple containing the hypotheses selection and count of new hypotheses
+            needed. Hypotheses selection are maintained from existing ones while new
+            hypotheses will be initialized, informed by pose sensory information.
 
         Notes:
             This function takes into account the following parameters:
-              - `step_resample_count`: The number of hypotheses to resample. This
-                is defined as a ratio to the number of nodes in the graph.
+              - `resampling_multiplier`: The number of hypotheses to resample. This
+                is defined as a multiplier of the number of nodes in the object graph.
               - `evidence_slope_threshold`: This dictates how many hypotheses to
-                delete based on the evidence slope threshold.
+                delete. Hypotheses below this threshold are deleted.
         """
         graph_num_points = self.graph_memory.get_locations_in_graph(
             graph_id, input_channel
@@ -340,15 +322,17 @@ class ResamplingHypothesesUpdater:
         num_hyps_per_node = self._num_hyps_per_node(channel_features)
         full_informed_count = graph_num_points * num_hyps_per_node
 
-        # If hypothesis space does not exist, we initialize with informed hypotheses
+        # If hypothesis space does not exist, we initialize with informed hypotheses.
+        # Should we remove this now that we are resampling? We can sample the
+        # same number of hypotheses during initialization as in every other step.
         if input_channel not in mapper.channels:
             return HypothesesSelection(maintain_mask=[]), full_informed_count
 
         # Calculate the total number of informed hypotheses to be resampled
-        new_informed = round(graph_num_points * self.step_resample_count)
+        new_informed = round(graph_num_points * self.resampling_multiplier)
         new_informed -= new_informed % num_hyps_per_node
 
-        # Calculate the total number of hypotheses to keep
+        # Returns a selection of hypotheses to maintain/delete
         hypotheses_selection = tracker.select_hypotheses(
             slope_threshold=self.evidence_slope_threshold, channel=input_channel
         )
@@ -380,8 +364,10 @@ class ResamplingHypothesesUpdater:
         Returns:
             The sampled existing hypotheses.
         """
+        maintain_ids = hypotheses_selection.maintain_ids
+
         # Return empty arrays for no hypotheses to sample
-        if len(hypotheses_selection.maintain_ids) == 0:
+        if len(maintain_ids) == 0:
             # Clear all channel hypotheses from the tracker
             tracker.clear_hyp(input_channel)
 
@@ -391,8 +377,6 @@ class ResamplingHypothesesUpdater:
                 poses=np.zeros((0, 3, 3)),
                 evidence=np.zeros(0),
             )
-
-        maintain_ids = hypotheses_selection.maintain_ids
 
         # Update tracker by removing the remove_ids
         tracker.remove_hyp(hypotheses_selection.remove_ids, input_channel)
