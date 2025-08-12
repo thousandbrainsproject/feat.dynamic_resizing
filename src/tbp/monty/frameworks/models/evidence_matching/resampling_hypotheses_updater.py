@@ -328,8 +328,12 @@ class ResamplingHypothesesUpdater:
         if input_channel not in mapper.channels:
             return HypothesesSelection(maintain_mask=[]), full_informed_count
 
+        # This makes sure that we do not request more than the available number of
+        # informed hypotheses
+        resampling_multiplier = min(self.resampling_multiplier, num_hyps_per_node)
+
         # Calculate the total number of informed hypotheses to be resampled
-        new_informed = round(graph_num_points * self.resampling_multiplier)
+        new_informed = round(graph_num_points * resampling_multiplier)
         new_informed -= new_informed % num_hyps_per_node
 
         # Returns a selection of hypotheses to maintain/delete
