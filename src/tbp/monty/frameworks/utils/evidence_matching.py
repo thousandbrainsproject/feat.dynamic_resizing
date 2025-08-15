@@ -440,7 +440,7 @@ class EvidenceSlopeTracker:
         if channel not in self.evidence_buffer:
             raise ValueError(f"Channel '{channel}' does not exist.")
 
-        slopes = self._calculate_slopes(channel)
+        slopes = self.calculate_slopes(channel)
         removable_mask = self.removable_indices_mask(channel)
 
         maintain_mask = (slopes >= slope_threshold) | (~removable_mask)
