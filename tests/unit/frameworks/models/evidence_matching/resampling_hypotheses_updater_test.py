@@ -240,8 +240,8 @@ class ResamplingHypothesesUpdaterTest(TestCase):
 
         We define three different tests of `_sample_count`:
             - Testing the requested count for initialization of hypotheses space
-            - Testing the count multiplier parameter
-            - Testing the count ratio of resampled hypotheses
+            - Testing the resampling multiplier parameter
+            - Testing the resampling multiplier parameter maximum limit
         """
         rlm = self.get_pretrained_resampling_lm()
 

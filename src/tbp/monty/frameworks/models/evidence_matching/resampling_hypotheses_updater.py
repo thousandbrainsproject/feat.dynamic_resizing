@@ -111,7 +111,8 @@ class ResamplingHypothesesUpdater:
                 selector.
             resampling_multiplier: Determines the number of the hypotheses to resample
                 as a multiplier of the object graph nodes. Value of 0.0 results in no
-                resampling. Defaults to 0.1.
+                resampling. Value can be greater than 1 but not to exceed the
+                `num_hyps_per_node` of the current step. Defaults to 0.1.
             evidence_slope_threshold: Hypotheses below this threshold are deleted.
                 Defaults to 0.0.
             initial_possible_poses: Initial
@@ -133,6 +134,9 @@ class ResamplingHypothesesUpdater:
             umbilical_num_poses: Number of sampled rotations in the direction of
                 the plane perpendicular to the surface normal. These are sampled at
                 umbilical points (i.e., points where PC directions are undefined).
+
+        Raises:
+            ValueError: If the resampling_multiplier is less than 0
         """
         self.feature_evidence_calculator = feature_evidence_calculator
         self.feature_evidence_increment = feature_evidence_increment
@@ -163,7 +167,8 @@ class ResamplingHypothesesUpdater:
         )
 
         # resampling multiplier should not be less than 0 (no resampling)
-        self.resampling_multiplier = max(0, resampling_multiplier)
+        if self.resampling_multiplier < 0:
+            raise ValueError("resampling_multiplier should be >= 0")
 
         # Dictionary of slope trackers, one for each graph_id
         self.evidence_slope_trackers: dict[str, EvidenceSlopeTracker] = {}

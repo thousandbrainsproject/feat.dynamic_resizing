@@ -419,11 +419,12 @@ class EvidenceSlopeTracker:
           - It is not yet removable due to age.
 
         Args:
-            slope_threshold: Minimum slope value to keep a removable hypothesis.
+            slope_threshold: Minimum slope value to keep a removable (sufficiently old)
+                hypothesis.
             channel: Name of the input channel.
 
         Returns:
-            The number of hypotheses to maintain.
+            A selection of hypotheses to maintain.
 
         Raises:
             ValueError: If the channel does not exist.
