@@ -80,6 +80,12 @@ class YcbExperiments:
 
 
 @dataclass
+class SimpleYcbExperiments:
+    simple_randrot_noise_10distinctobj_dist_agent: dict
+    simple_base_config_10distinctobj_dist_agent: dict
+
+
+@dataclass
 class UnsupervisedInferenceExperiments:
     unsupervised_inference_distinctobj_surf_agent: dict
     unsupervised_inference_distinctobj_dist_agent: dict

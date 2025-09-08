@@ -17,6 +17,7 @@ from benchmarks.configs.names import (
     MontyWorldHabitatExperiments,
     MyExperiments,
     PretrainingExperiments,
+    SimpleYcbExperiments,
     UnsupervisedInferenceExperiments,
     YcbExperiments,
 )
@@ -77,6 +78,7 @@ def select_config(experiment: str) -> dict:
         field.name for field in fields(PretrainingExperiments)
     ]
     ycb_experiment_names = [field.name for field in fields(YcbExperiments)]
+    simple_ycb_experiment_names = [field.name for field in fields(SimpleYcbExperiments)]
     unsupervised_inference_experiment_names = [
         field.name for field in fields(UnsupervisedInferenceExperiments)
     ]
@@ -100,6 +102,10 @@ def select_config(experiment: str) -> dict:
         from benchmarks.configs.ycb_experiments import CONFIGS as YCB
 
         return YCB
+    elif experiment in simple_ycb_experiment_names:
+        from benchmarks.configs.simple_ycb_experiments import CONFIGS as SYCB
+
+        return SYCB
     elif experiment in unsupervised_inference_experiment_names:
         from benchmarks.configs.unsupervised_inference_experiments import (
             CONFIGS as UNSUPERVISED_INFERENCE,
