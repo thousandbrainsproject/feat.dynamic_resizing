@@ -9,17 +9,22 @@
 
 from dataclasses import asdict
 
-import numpy as np
-
 from benchmarks.configs.names import SimpleYcbExperiments
 from benchmarks.configs.ycb_experiments import experiments
 from tbp.monty.frameworks.config_utils.config_args import (
     DetailedEvidenceLMLoggingConfig,
+    get_cube_face_and_corner_views_rotations,
+)
+from tbp.monty.frameworks.config_utils.make_dataset_configs import (
+    EnvironmentDataloaderPerObjectArgs,
+    PredefinedObjectInitializer,
 )
 from tbp.monty.frameworks.loggers.monty_handlers import (
     BasicCSVStatsHandler,
     DetailedJSONHandler,
 )
+
+test_rotation = get_cube_face_and_corner_views_rotations()[:1]
 
 # Adding Resampling to YCB experiments
 simple_ycb_experiments = {}
@@ -31,11 +36,11 @@ for exp_name, cfg in asdict(experiments).items():
         mod_exp_name = "simple_" + exp_name
         mod_cfg = cfg.copy()
 
-        mod_cfg["eval_dataloader_args"]["object_names"] = ["mug"]
-        mod_cfg["experiment_args"]["n_eval_epochs"] = 1
-        mod_cfg["eval_dataloader_args"]["object_init_sampler"].rotations = [
-            np.array([0, 0, 0])
-        ]
+        mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
+        mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
+            object_names=["mug"],
+            object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
+        )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
             monty_handlers=[BasicCSVStatsHandler, DetailedJSONHandler],
             wandb_handlers=[],
