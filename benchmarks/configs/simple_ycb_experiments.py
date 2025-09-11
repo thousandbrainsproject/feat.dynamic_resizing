@@ -24,10 +24,8 @@ from tbp.monty.frameworks.loggers.monty_handlers import (
     DetailedJSONHandler,
 )
 
-test_rotation = get_cube_face_and_corner_views_rotations()[:1]
-
-# Adding Resampling to YCB experiments
 simple_ycb_experiments = {}
+
 for exp_name, cfg in asdict(experiments).items():
     if exp_name in [
         "base_config_10distinctobj_dist_agent",
@@ -36,15 +34,42 @@ for exp_name, cfg in asdict(experiments).items():
         mod_exp_name = "simple_" + exp_name
         mod_cfg = cfg.copy()
 
+        test_rotation = get_cube_face_and_corner_views_rotations()[:1]
         mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
         mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
             object_names=["mug"],
             object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
         )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
-            monty_handlers=[BasicCSVStatsHandler, DetailedJSONHandler],
+            monty_handlers=[
+                BasicCSVStatsHandler,
+                DetailedJSONHandler,
+                # ReproduceEpisodeHandler,
+            ],
             wandb_handlers=[],
         )
+
+        # === MODS === #
+        # mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+        #     "learning_module_args"
+        # ]["use_multithreading"] = True
+
+        # mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+        #     "learning_module_args"
+        # ]["evidence_threshold_config"] = "all"
+
+        alpha = 0.1
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_args"
+        ]["present_weight"] = alpha
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_args"
+        ]["past_weight"] = 1 - alpha
+        # === END MODS === #
+
+        # mod_cfg["monty_config"]["motor_system_config"]["motor_system_args"][
+        #     "policy_args"
+        # ]["use_goal_state_driven_actions"] = False
 
         simple_ycb_experiments[mod_exp_name] = mod_cfg
 
