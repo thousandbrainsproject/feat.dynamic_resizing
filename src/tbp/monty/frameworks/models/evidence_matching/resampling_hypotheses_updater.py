@@ -102,7 +102,7 @@ class ResamplingHypothesesUpdater:
             DefaultFeaturesForMatchingSelector
         ),
         resampling_multiplier: float = 0.1,
-        evidence_slope_threshold: float = 0.0,
+        evidence_slope_threshold: float = 0.3,
         include_telemetry: bool = False,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",
@@ -400,13 +400,13 @@ class ResamplingHypothesesUpdater:
         new_informed -= new_informed % num_hyps_per_node
 
         # Returns a selection of hypotheses to maintain/delete
-        # hypotheses_selection = tracker.select_hypotheses(
-        #     slope_threshold=self.evidence_slope_threshold, channel=input_channel
-        # )
-
-        hypotheses_selection = tracker.select_hypotheses_ema(
-            ema_threshold=self.evidence_slope_threshold, channel=input_channel
+        hypotheses_selection = tracker.select_hypotheses(
+            slope_threshold=self.evidence_slope_threshold, channel=input_channel
         )
+
+        # hypotheses_selection = tracker.select_hypotheses_ema(
+        #     ema_threshold=self.evidence_slope_threshold, channel=input_channel
+        # )
 
         return (
             hypotheses_selection,
