@@ -67,6 +67,7 @@ class ChannelHypothesesResamplingTelemetry:
     added_ids: npt.NDArray[np.int_]
     ages: npt.NDArray[np.int_]
     evidence_slopes: npt.NDArray[np.float64]
+    evidence_ema: npt.NDArray[np.float64]
     removed_ids: npt.NDArray[np.int_]
 
 
@@ -101,7 +102,7 @@ class ResamplingHypothesesUpdater:
             DefaultFeaturesForMatchingSelector
         ),
         resampling_multiplier: float = 0.1,
-        evidence_slope_threshold: float = 0.3,
+        evidence_slope_threshold: float = 0.0,
         include_telemetry: bool = False,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",
@@ -304,6 +305,9 @@ class ResamplingHypothesesUpdater:
             )
             hypotheses_updates.append(channel_hypotheses)
 
+            # Update tracker evidence
+            tracker.update(channel_hypotheses.evidence, input_channel)
+
             if self.include_telemetry:
                 resampling_telemetry[input_channel] = asdict(
                     ChannelHypothesesResamplingTelemetry(
@@ -316,12 +320,10 @@ class ResamplingHypothesesUpdater:
                         ),
                         ages=tracker.hyp_ages(input_channel),
                         evidence_slopes=tracker.calculate_slopes(input_channel),
+                        evidence_ema=tracker.ema_values(input_channel),
                         removed_ids=hypotheses_selection.remove_ids,
                     )
                 )
-
-            # Update tracker evidence
-            tracker.update(channel_hypotheses.evidence, input_channel)
 
         return (
             hypotheses_updates,
@@ -398,8 +400,12 @@ class ResamplingHypothesesUpdater:
         new_informed -= new_informed % num_hyps_per_node
 
         # Returns a selection of hypotheses to maintain/delete
-        hypotheses_selection = tracker.select_hypotheses(
-            slope_threshold=self.evidence_slope_threshold, channel=input_channel
+        # hypotheses_selection = tracker.select_hypotheses(
+        #     slope_threshold=self.evidence_slope_threshold, channel=input_channel
+        # )
+
+        hypotheses_selection = tracker.select_hypotheses_ema(
+            ema_threshold=self.evidence_slope_threshold, channel=input_channel
         )
 
         return (
