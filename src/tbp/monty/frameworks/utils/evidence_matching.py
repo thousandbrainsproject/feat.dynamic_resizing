@@ -288,6 +288,8 @@ class EvidenceSlopeTracker:
         self.window_size = window_size
         self.min_age = min_age
         self.evidence_buffer: dict[str, npt.NDArray[np.float64]] = {}
+        self.ema_alpha: float = 0.1
+        self.ema_buffer: dict[str, npt.NDArray[np.float64]] = {}
         self.hyp_age: dict[str, npt.NDArray[np.int_]] = {}
 
     def total_size(self, channel: str) -> int:
@@ -323,15 +325,20 @@ class EvidenceSlopeTracker:
         """
         new_data = np.full((num_new_hyp, self.window_size), np.nan)
         new_age = np.zeros(num_new_hyp, dtype=int)
+        new_ema = np.full(num_new_hyp, np.nan, dtype=np.float64)
 
         if channel not in self.evidence_buffer:
             self.evidence_buffer[channel] = new_data
             self.hyp_age[channel] = new_age
+            self.ema_buffer[channel] = new_ema
         else:
             self.evidence_buffer[channel] = np.vstack(
                 (self.evidence_buffer[channel], new_data)
             )
             self.hyp_age[channel] = np.concatenate((self.hyp_age[channel], new_age))
+            self.ema_buffer[channel] = np.concatenate(
+                (self.ema_buffer[channel], new_ema)
+            )
 
     def hyp_ages(self, channel: str) -> npt.NDArray[np.int_]:
         """Returns the ages of hypotheses in a channel.
@@ -341,29 +348,63 @@ class EvidenceSlopeTracker:
         """
         return self.hyp_age[channel]
 
-    def update(self, values: npt.NDArray[np.float64], channel: str) -> None:
-        """Updates all hypotheses in a channel with new evidence values.
+    def update(
+        self,
+        values: npt.NDArray[np.float64],
+        channel: str,
+        alpha: float | None = None,
+    ) -> None:
+        """Updates evidence buffer and EMA over step deltas for a channel.
 
-        Args:
-            values: List or array of new evidence values.
-            channel: Name of the input channel.
+        The step delta per hypothesis is computed from the new evidence and the
+        last stored evidence value in the rolling buffer, then EMA is updated:
+
+            delta = values - prev_last_evidence
+            ema = alpha * delta + (1 - alpha) * ema_prev
+
+        If prev_last_evidence is NaN (new row) the delta is treated as the value itself.
+        If ema_prev is NaN (first EMA update) the EMA is initialized to delta.
 
         Raises:
-            ValueError: If the channel doesn't exist or the number of values is
-                incorrect.
+            ValueError: If the channel doesn't exist or size mismatch.
+
+        Args:
+            values: New evidence values for all hypotheses in the channel.
+            channel: Name of the input channel.
+            alpha: Optional smoothing factor. Defaults to self.ema_alpha.
         """
         if channel not in self.evidence_buffer:
             raise ValueError(f"Channel '{channel}' does not exist.")
-
         if values.shape[0] != self.total_size(channel):
             raise ValueError(
                 f"Expected {self.total_size(channel)} values, but got {len(values)}"
             )
 
-        # Shift evidence buffer by one step
-        self.evidence_buffer[channel][:, :-1] = self.evidence_buffer[channel][:, 1:]
+        a = self.ema_alpha if alpha is None else float(alpha)
+        if not (0.0 < a <= 1.0):
+            raise ValueError("alpha must be in (0, 1].")
 
-        # Add new evidence data
+        # prev_last before shifting
+        prev_last = self.evidence_buffer[channel][:, -1].copy()
+
+        # Compute per-hypothesis step delta. If prev_last is NaN, use the value itself.
+        delta = values - prev_last
+        need_init = np.isnan(prev_last)
+        delta[need_init] = values[need_init]
+
+        # Update EMA buffer. Initialize where EMA is NaN.
+        ema_vec = self.ema_buffer[channel]
+        ema_init_mask = np.isnan(ema_vec)
+        # initialize missing EMA entries with current delta
+        if np.any(ema_init_mask):
+            ema_vec[ema_init_mask] = delta[ema_init_mask]
+        # standard EMA update everywhere else
+        upd_mask = ~ema_init_mask
+        if np.any(upd_mask):
+            ema_vec[upd_mask] = a * delta[upd_mask] + (1.0 - a) * ema_vec[upd_mask]
+
+        # Shift evidence buffer and add new values
+        self.evidence_buffer[channel][:, :-1] = self.evidence_buffer[channel][:, 1:]
         self.evidence_buffer[channel][:, -1] = values
 
         # Increment age
@@ -396,6 +437,16 @@ class EvidenceSlopeTracker:
         # Return the average slope for each tracked hypothesis, ignoring Nan
         return np.nansum(diffs, axis=1) / valid_steps
 
+    def ema_values(self, channel: str) -> npt.NDArray[np.float64]:
+        """Returns current EMA values for the channel.
+
+        Raises:
+            ValueError: If the channel doesn't exist.
+        """
+        if channel not in self.ema_buffer:
+            raise ValueError(f"Channel '{channel}' does not exist.")
+        return self.ema_buffer[channel]
+
     def remove_hyp(self, hyp_ids: npt.NDArray[np.int_], channel: str) -> None:
         """Removes specific hypotheses by index in the specified channel.
 
@@ -407,6 +458,7 @@ class EvidenceSlopeTracker:
         mask[hyp_ids] = False
         self.evidence_buffer[channel] = self.evidence_buffer[channel][mask]
         self.hyp_age[channel] = self.hyp_age[channel][mask]
+        self.ema_buffer[channel] = self.ema_buffer[channel][mask]
 
     def clear_hyp(self, channel: str) -> None:
         """Clears the hypotheses in a specific channel.
@@ -444,6 +496,41 @@ class EvidenceSlopeTracker:
         removable_mask = self.removable_indices_mask(channel)
 
         maintain_mask = (slopes >= slope_threshold) | (~removable_mask)
+
+        return HypothesesSelection(maintain_mask)
+
+    def select_hypotheses_ema(
+        self,
+        ema_threshold: float,
+        channel: str,
+    ) -> HypothesesSelection:
+        """Returns a hypotheses selection using EMA(delta evidence) as the criterion.
+
+        A hypothesis is maintained if:
+          - Its EMA is >= the threshold, OR
+          - It is not yet removable due to age (age < min_age).
+
+        NaN EMA values do not pass the threshold, but those hypotheses are still
+        maintained if they are not yet removable.
+
+        Args:
+            ema_threshold: Minimum EMA value to keep a removable hypothesis.
+            channel: Name of the input channel.
+
+        Returns:
+            A selection of hypotheses to maintain.
+
+        Raises:
+            ValueError: If the channel does not exist.
+        """
+        if channel not in self.evidence_buffer or channel not in self.ema_buffer:
+            raise ValueError(f"Channel '{channel}' does not exist.")
+
+        ema = self.ema_buffer[channel]
+        removable_mask = self.removable_indices_mask(channel)
+
+        # Maintain if passes EMA threshold or is not yet removable
+        maintain_mask = (ema >= ema_threshold) | (~removable_mask)
 
         return HypothesesSelection(maintain_mask)
 
