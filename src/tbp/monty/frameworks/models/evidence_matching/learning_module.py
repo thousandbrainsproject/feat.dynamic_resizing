@@ -612,7 +612,9 @@ class EvidenceGraphLM(GraphLM):
     def get_top_two_pose_hypotheses_for_graph_id(self, graph_id):
         """Return top two hypotheses for a given graph_id."""
         mlh_for_graph = self._calculate_most_likely_hypothesis(graph_id)
-        second_mlh_id = np.argsort(self.evidence[graph_id])[-2]
+        second_mlh_id = np.argsort(self.get_normalized_evidences_for_object(graph_id))[
+            -2
+        ]
         second_mlh = self._get_mlh_dict_from_id(graph_id, second_mlh_id)
         return mlh_for_graph, second_mlh
 
@@ -644,7 +646,7 @@ class EvidenceGraphLM(GraphLM):
         return all_poses
 
     def get_possible_hypothesis_ids(self, object_id):
-        max_obj_evidence = np.max(self.evidence[object_id])
+        max_obj_evidence = np.max(self.get_normalized_evidences(object_id))
         # TODO: Try out different ways to adapt object_evidence_threshold to number of
         # steps taken so far and number of objects in memory
         if max_obj_evidence > self.object_evidence_threshold:
@@ -666,8 +668,25 @@ class EvidenceGraphLM(GraphLM):
             return ["patch_off_object"], [0]
         graph_evidences = []
         for graph_id in graph_ids:
-            graph_evidences.append(np.max(self.evidence[graph_id]))
+            graph_evidences.append(np.max(self.get_normalized_evidences(graph_id)))
         return graph_ids, np.array(graph_evidences)
+
+    def get_normalized_evidences_for_object(self, object_id):
+        evidence = self.evidence[object_id]
+        mapper = self.channel_hypothesis_mapping[object_id]
+        tracker = self.hypotheses_updater.evidence_slope_trackers[object_id]
+        ages = np.concatenate(
+            [tracker.hyp_ages(channel) for channel in mapper.channels]
+        )
+        return (evidence / ages) * (1 - np.exp(-ages / 10))
+
+    def get_normalized_evidences(self, object_id=None):
+        """Return normalized evidence for each pose on each graph."""
+        if object_id is not None:
+            return self.get_normalized_evidences_for_object(object_id)
+            # return self.evidence[object_id]
+
+        return self.evidence
 
     def get_all_evidences(self):
         """Return evidence for each pose on each graph (pointer)."""
@@ -1146,12 +1165,12 @@ class EvidenceGraphLM(GraphLM):
         """
         mlh = {}
         if graph_id is not None:
-            mlh_id = np.argmax(self.evidence[graph_id])
+            mlh_id = np.argmax(self.get_normalized_evidences(graph_id))
             mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
         else:
             highest_evidence_so_far = -np.inf
             for graph_id in self.get_all_known_object_ids():
-                mlh_id = np.argmax(self.evidence[graph_id])
+                mlh_id = np.argmax(self.get_normalized_evidences(graph_id))
                 evidence = self.evidence[graph_id][mlh_id]
                 if evidence > highest_evidence_so_far:
                     mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
