@@ -713,8 +713,11 @@ class EvidenceGoalStateGenerator(GraphGoalStateGenerator):
             A dictionary containing the hypothesis to test, the target location and
             surface normal of the target point on the object.
         """
-        mlh = self.parent_lm.get_current_mlh()
-        mlh_id = mlh["graph_id"]
+        # mlh = self.parent_lm.get_current_mlh()
+        # mlh_id = mlh["graph_id"]
+
+        mlh_id, second_id = self.parent_lm.get_top_two_mlh_ids()
+        mlh = self.parent_lm.get_mlh_for_object(mlh_id)
 
         target_object = self.parent_lm.get_graph(mlh_id)
         sensor_channel_name = self.parent_lm.buffer.get_first_sensory_input_channel()
