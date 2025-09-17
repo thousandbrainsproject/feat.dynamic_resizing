@@ -14,6 +14,9 @@ import numpy as np
 from tbp.monty.frameworks.models.evidence_matching.learning_module import (
     EvidenceGraphLM,
 )
+from tbp.monty.frameworks.models.evidence_matching.resampling_hypotheses_updater import (
+    ResamplingHypothesesUpdater,
+)
 from tbp.monty.frameworks.models.goal_state_generation import EvidenceGoalStateGenerator
 from tbp.monty.frameworks.models.sensor_modules import FeatureChangeSM
 
@@ -101,6 +104,7 @@ default_evidence_lm_config = dict(
             desired_object_distance=0.03,  # Distance from the object to the
             # agent that is considered "close enough" to the object
         ),
+        hypotheses_updater_class=ResamplingHypothesesUpdater,
         hypotheses_updater_args=dict(
             # Using a smaller max_nneighbors (5 instead of 10) makes runtime faster,
             # but reduces performance a bit
