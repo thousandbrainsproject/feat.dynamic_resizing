@@ -445,6 +445,19 @@ class EvidenceSlopeTracker:
 
         maintain_mask = (slopes >= slope_threshold) | (~removable_mask)
 
+        # Ensure at least 2 kept overall
+        kept = int(maintain_mask.sum())
+        need = max(0, min(2, slopes.shape[0]) - kept)
+        if need > 0:
+            # Candidates are those not already kept
+            cand_idx = np.where(~maintain_mask)[0]
+            if cand_idx.size > 0:
+                # Rank by slope descending, treat NaN as very low
+                cand_scores = np.nan_to_num(slopes[cand_idx], nan=-np.inf)
+                order = np.argsort(cand_scores)[::-1]
+                pick = cand_idx[order[:need]]
+                maintain_mask[pick] = True
+
         return HypothesesSelection(maintain_mask)
 
 
