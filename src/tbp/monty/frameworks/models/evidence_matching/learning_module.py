@@ -201,7 +201,9 @@ class EvidenceGraphLM(GraphLM):
         self.vote_weight = vote_weight
         # --- Terminal Condition Params ---
         self.object_evidence_threshold = object_evidence_threshold
+        # self.object_evidence_threshold = 0
         self.x_percent_threshold = x_percent_threshold
+        # self.x_percent_threshold = 10
         self.path_similarity_threshold = path_similarity_threshold
         self.pose_similarity_threshold = pose_similarity_threshold
         self.required_symmetry_evidence = required_symmetry_evidence
@@ -520,6 +522,7 @@ class EvidenceGraphLM(GraphLM):
             )
             # Check for symmetry
             symmetry_detected = self._check_for_symmetry(
+                object_id,
                 possible_object_hypotheses_ids,
                 # Don't increment symmetry counter if LM didn't process observation
                 increment_evidence=self.buffer.get_last_obs_processed(),
@@ -612,9 +615,7 @@ class EvidenceGraphLM(GraphLM):
     def get_top_two_pose_hypotheses_for_graph_id(self, graph_id):
         """Return top two hypotheses for a given graph_id."""
         mlh_for_graph = self._calculate_most_likely_hypothesis(graph_id)
-        second_mlh_id = np.argsort(self.get_normalized_evidences_for_object(graph_id))[
-            -2
-        ]
+        second_mlh_id = np.argsort(self.get_normalized_evidences(graph_id))[-2]
         second_mlh = self._get_mlh_dict_from_id(graph_id, second_mlh_id)
         return mlh_for_graph, second_mlh
 
@@ -671,20 +672,40 @@ class EvidenceGraphLM(GraphLM):
             graph_evidences.append(np.max(self.get_normalized_evidences(graph_id)))
         return graph_ids, np.array(graph_evidences)
 
+    def get_ages_for_object(self, object_id, resampling=False):
+        if resampling:
+            mapper = self.channel_hypothesis_mapping[object_id]
+            tracker = self.hypotheses_updater.evidence_slope_trackers[object_id]
+            ages = np.concatenate(
+                [tracker.hyp_ages(channel) for channel in mapper.channels]
+            )
+        else:
+            ages = np.array([len(self.buffer)] * len(self.evidence[object_id]))
+
+        return ages
+
     def get_normalized_evidences_for_object(self, object_id):
         evidence = self.evidence[object_id]
-        mapper = self.channel_hypothesis_mapping[object_id]
-        tracker = self.hypotheses_updater.evidence_slope_trackers[object_id]
-        ages = np.concatenate(
-            [tracker.hyp_ages(channel) for channel in mapper.channels]
-        )
-        return (evidence / ages) * (1 - np.exp(-ages / 10))
+        ages = self.get_ages_for_object(object_id, resampling=False)
+        slope = evidence / ages
+        penalty = np.exp(-ages / 10)
+
+        # slope[ages < 10] = -1.0
+        adj = slope
+        # adj = slope - penalty * np.abs(slope)
+        # adj = slope * (1 - penalty)
+        return adj
 
     def get_normalized_evidences(self, object_id=None):
         """Return normalized evidence for each pose on each graph."""
         if object_id is not None:
-            return self.get_normalized_evidences_for_object(object_id)
-            # return self.evidence[object_id]
+            # return self.get_normalized_evidences_for_object(object_id)
+            return self.evidence[object_id]
+
+        # evidences = {
+        #     g: self.get_normalized_evidences_for_object(g) for g in self.evidence.keys()
+        # }
+        # return evidences
 
         return self.evidence
 
@@ -988,7 +1009,22 @@ class EvidenceGraphLM(GraphLM):
         pose_is_unique = location_unique and rotation_unique
         return pose_is_unique
 
-    def _check_for_symmetry(self, possible_object_hypotheses_ids, increment_evidence):
+    def _remap_hypotheses(self, object_id):
+        removed_ids = self.hypotheses_updater_telemetry[object_id]["patch"][
+            "removed_ids"
+        ]
+
+        r = np.unique(removed_ids)
+        h = np.asarray(self.last_possible_hypotheses)
+        # count how many removed are < each h
+        shifts = np.searchsorted(r, h, side="left")
+        # mask out ones that were removed exactly
+        keep = ~np.isin(h, r, assume_unique=False)
+        return (h - shifts)[keep].tolist()
+
+    def _check_for_symmetry(
+        self, object_id, possible_object_hypotheses_ids, increment_evidence
+    ):
         """Check whether the most likely hypotheses stayed the same over the past steps.
 
         Since the definition of possible_object_hypotheses is a bit murky and depends
@@ -997,6 +1033,7 @@ class EvidenceGraphLM(GraphLM):
         not sure if this is the best way to check for symmetry...
 
         Args:
+            object_id: The object of the one possible match.
             possible_object_hypotheses_ids: List of IDs of all possible hypotheses.
             increment_evidence: Whether to increment symmetry evidence or not. We
                 may want this to be False for example if we did not receive a new
@@ -1011,9 +1048,12 @@ class EvidenceGraphLM(GraphLM):
             f"\n\nchecking for symmetry for hp ids {possible_object_hypotheses_ids}"
             f" with last ids {self.last_possible_hypotheses}"
         )
+
+        # self.last_possible_hypotheses = self._remap_hypotheses(object_id)
+
         if increment_evidence:
-            previous_hyps = set(possible_object_hypotheses_ids)
-            current_hyps = set(self.last_possible_hypotheses)
+            previous_hyps = set(self.last_possible_hypotheses)
+            current_hyps = set(possible_object_hypotheses_ids)
             hypothesis_overlap = previous_hyps.intersection(current_hyps)
             if len(hypothesis_overlap) / len(current_hyps) > 0.9:
                 # at least 90% of current possible ids were also in previous ids
@@ -1150,7 +1190,7 @@ class EvidenceGraphLM(GraphLM):
             "location": self.possible_locations[graph_id][mlh_id],
             "rotation": Rotation.from_matrix(self.possible_poses[graph_id][mlh_id]),
             "scale": self.get_object_scale(graph_id),
-            "evidence": self.evidence[graph_id][mlh_id],
+            "evidence": self.get_normalized_evidences(graph_id)[mlh_id],
         }
         return mlh_dict
 
@@ -1171,7 +1211,7 @@ class EvidenceGraphLM(GraphLM):
             highest_evidence_so_far = -np.inf
             for graph_id in self.get_all_known_object_ids():
                 mlh_id = np.argmax(self.get_normalized_evidences(graph_id))
-                evidence = self.evidence[graph_id][mlh_id]
+                evidence = self.get_normalized_evidences(graph_id)[mlh_id]
                 if evidence > highest_evidence_so_far:
                     mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
                     highest_evidence_so_far = evidence
@@ -1205,6 +1245,6 @@ class EvidenceGraphLM(GraphLM):
         stats["possible_locations"] = self.possible_locations
         if get_rotations:
             stats["possible_rotations"] = self.get_possible_poses(as_euler=False)
-        stats["evidences"] = self.evidence
+        stats["evidences"] = self.get_normalized_evidences()
         stats["symmetry_evidence"] = self.symmetry_evidence
         return stats

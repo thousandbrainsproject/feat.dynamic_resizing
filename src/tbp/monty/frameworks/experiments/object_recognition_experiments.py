@@ -44,6 +44,12 @@ class MontyObjectRecognitionExperiment(MontyExperiment):
         last_step = self.run_episode_steps()
         self.post_episode(last_step)
 
+        # if self.eval_episodes == 35:
+        #     last_step = self.run_episode_steps()
+        #     self.post_episode(last_step)
+        # else:
+        #     self.eval_episodes += 1
+
     def pre_episode(self):
         """Pre-episode hook.
 

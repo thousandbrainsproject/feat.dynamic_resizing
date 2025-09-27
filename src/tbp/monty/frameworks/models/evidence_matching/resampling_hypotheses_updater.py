@@ -170,7 +170,8 @@ class ResamplingHypothesesUpdater:
         self.resampling_multiplier = resampling_multiplier
         self.evidence_slope_threshold = evidence_slope_threshold
         self.graph_memory = graph_memory
-        self.include_telemetry = include_telemetry
+        # self.include_telemetry = include_telemetry
+        self.include_telemetry = True
         self.initial_possible_poses = get_initial_possible_poses(initial_possible_poses)
         self.tolerances = tolerances
         self.umbilical_num_poses = umbilical_num_poses

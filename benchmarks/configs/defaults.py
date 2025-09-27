@@ -105,6 +105,7 @@ default_evidence_lm_config = dict(
             # agent that is considered "close enough" to the object
         ),
         hypotheses_updater_class=ResamplingHypothesesUpdater,
+        # hypotheses_updater_class=DefaultHypothesesUpdater,
         hypotheses_updater_args=dict(
             # Using a smaller max_nneighbors (5 instead of 10) makes runtime faster,
             # but reduces performance a bit
