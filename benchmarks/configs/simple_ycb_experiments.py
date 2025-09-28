@@ -66,13 +66,13 @@ for exp_name, cfg in asdict(experiments).items():
         # === MODS === #
 
         lm_args = {
-            "use_normalized_evidence": False,
+            "use_normalized_evidence": True,
             # "object_evidence_threshold": 0,
         }
 
         updater_args = {
-            "resampling_multiplier": 0.0,
-            "evidence_slope_threshold": -1.0,
+            "resampling_multiplier": 0.1,
+            "evidence_slope_threshold": 0.3,
             "include_telemetry": True,
         }
 
@@ -91,6 +91,15 @@ for exp_name, cfg in asdict(experiments).items():
         mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
             "learning_module_args"
         ]["hypotheses_updater_args"].update(updater_args)
+
+        mod_cfg["monty_config"]["sensor_module_configs"]["sensor_module_0"][
+            "sensor_module_args"
+        ]["save_raw_obs"] = False
+
+        mod_cfg["monty_config"]["sensor_module_configs"]["sensor_module_1"][
+            "sensor_module_args"
+        ]["save_raw_obs"] = False
+
         # === END MODS === #
 
         simple_ycb_experiments[mod_exp_name] = mod_cfg

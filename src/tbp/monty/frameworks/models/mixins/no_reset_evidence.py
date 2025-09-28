@@ -139,7 +139,9 @@ class TheoreticalLimitLMLoggingMixin:
         mapper = self.channel_hypothesis_mapping[graph_id]
         channel_rotations = mapper.extract(self.possible_poses[graph_id], input_channel)
         channel_rotations_inv = Rotation.from_matrix(channel_rotations).inv()
-        channel_evidence = mapper.extract(self.evidence[graph_id], input_channel)
+        channel_evidence = mapper.extract(
+            self.get_normalized_evidences(graph_id), input_channel
+        )
         channel_locations = mapper.extract(
             self.possible_locations[graph_id], input_channel
         )
