@@ -51,7 +51,7 @@ for exp_name, cfg in asdict(experiments).items():
         test_rotation = get_cube_face_and_corner_views_rotations()[2:3]
         mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
         mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
-            object_names=["mug", "potted_meat_can"],
+            object_names=["mug", "banana"],
             object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
         )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
