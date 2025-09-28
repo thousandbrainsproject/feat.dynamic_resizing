@@ -23,6 +23,20 @@ from tbp.monty.frameworks.loggers.monty_handlers import (
     BasicCSVStatsHandler,
     DetailedJSONHandler,
 )
+from tbp.monty.frameworks.models.evidence_matching.learning_module import (
+    EvidenceGraphLM,
+)
+from tbp.monty.frameworks.models.evidence_matching.resampling_hypotheses_updater import (  # noqa: E501
+    ResamplingHypothesesUpdater,
+)
+from tbp.monty.frameworks.models.mixins.no_reset_evidence import (
+    TheoreticalLimitLMLoggingMixin,
+)
+
+
+class EvidenceGraphLMLogging(TheoreticalLimitLMLoggingMixin, EvidenceGraphLM):
+    pass
+
 
 simple_ycb_experiments = {}
 
@@ -35,9 +49,11 @@ for exp_name, cfg in asdict(experiments).items():
         mod_cfg = cfg.copy()
 
         test_rotation = get_cube_face_and_corner_views_rotations()[2:3]
+        # test_rotation = get_cube_face_and_corner_views_rotations()[1:3]
         mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
         mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
-            object_names=["mug", "banana", "potted_meat_can"],
+            # object_names=["mug", "banana", "potted_meat_can"],
+            object_names=["banana", "potted_meat_can"],
             object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
         )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
@@ -50,19 +66,23 @@ for exp_name, cfg in asdict(experiments).items():
         )
 
         # === MODS === #
-        # updater_args = {
-        #     "resampling_multiplier": 0.0,
-        #     "evidence_slope_threshold": -1.0,
-        #     "include_telemetry": True,
-        # }
+        updater_args = {
+            "resampling_multiplier": 0.0,
+            "evidence_slope_threshold": -1.0,
+            "include_telemetry": True,
+        }
 
-        # mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
-        #     "learning_module_args"
-        # ]["hypotheses_updater_class"] = ResamplingHypothesesUpdater
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_class"
+        ] = EvidenceGraphLMLogging
 
-        # mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
-        #     "learning_module_args"
-        # ]["hypotheses_updater_args"].update(updater_args)
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_args"
+        ]["hypotheses_updater_class"] = ResamplingHypothesesUpdater
+
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_args"
+        ]["hypotheses_updater_args"].update(updater_args)
         # === END MODS === #
 
         simple_ycb_experiments[mod_exp_name] = mod_cfg
