@@ -51,7 +51,7 @@ for exp_name, cfg in asdict(experiments).items():
         test_rotation = get_cube_face_and_corner_views_rotations()[2:3]
         mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
         mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
-            object_names=["banana", "potted_meat_can"],
+            object_names=["mug", "potted_meat_can"],
             object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
         )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
@@ -64,6 +64,12 @@ for exp_name, cfg in asdict(experiments).items():
         )
 
         # === MODS === #
+
+        lm_args = {
+            "use_normalized_evidence": False,
+            # "object_evidence_threshold": 0,
+        }
+
         updater_args = {
             "resampling_multiplier": 0.0,
             "evidence_slope_threshold": -1.0,
@@ -73,6 +79,10 @@ for exp_name, cfg in asdict(experiments).items():
         mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
             "learning_module_class"
         ] = EvidenceGraphLMLogging
+
+        mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
+            "learning_module_args"
+        ].update(lm_args)
 
         mod_cfg["monty_config"]["learning_module_configs"]["learning_module_0"][
             "learning_module_args"

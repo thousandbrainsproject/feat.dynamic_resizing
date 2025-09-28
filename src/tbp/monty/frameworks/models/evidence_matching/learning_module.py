@@ -158,6 +158,7 @@ class EvidenceGraphLM(GraphLM):
         past_weight=1,
         present_weight=1,
         vote_weight=1,
+        use_normalized_evidence=False,
         object_evidence_threshold=1,
         x_percent_threshold=10,
         path_similarity_threshold=0.1,
@@ -194,6 +195,7 @@ class EvidenceGraphLM(GraphLM):
         self.feature_evidence_increment = feature_evidence_increment
         self.evidence_threshold_config = evidence_threshold_config
         self.vote_evidence_threshold = vote_evidence_threshold
+        self.use_normalized_evidence = use_normalized_evidence
         # ------ Weighting Params ------
         self.feature_weights = feature_weights
         self.past_weight = past_weight
@@ -612,7 +614,7 @@ class EvidenceGraphLM(GraphLM):
     def get_top_two_pose_hypotheses_for_graph_id(self, graph_id):
         """Return top two hypotheses for a given graph_id."""
         mlh_for_graph = self._calculate_most_likely_hypothesis(graph_id)
-        second_mlh_id = np.argsort(self.evidence[graph_id])[-2]
+        second_mlh_id = np.argsort(self.get_normalized_evidences(graph_id))[-2]
         second_mlh = self._get_mlh_dict_from_id(graph_id, second_mlh_id)
         return mlh_for_graph, second_mlh
 
@@ -644,14 +646,15 @@ class EvidenceGraphLM(GraphLM):
         return all_poses
 
     def get_possible_hypothesis_ids(self, object_id):
-        max_obj_evidence = np.max(self.evidence[object_id])
+        max_obj_evidence = np.max(self.get_normalized_evidences(object_id))
         # TODO: Try out different ways to adapt object_evidence_threshold to number of
         # steps taken so far and number of objects in memory
         if max_obj_evidence > self.object_evidence_threshold:
             x_percent_of_max = max_obj_evidence / 100 * self.x_percent_threshold
             # Get all pose IDs that have an evidence in the top n%
             possible_object_hypotheses_ids = np.where(
-                self.evidence[object_id] > max_obj_evidence - x_percent_of_max
+                self.get_normalized_evidences(object_id)
+                > max_obj_evidence - x_percent_of_max
             )[0]
             logger.debug(
                 f"possible hpids: {possible_object_hypotheses_ids} for {object_id}"
@@ -666,8 +669,50 @@ class EvidenceGraphLM(GraphLM):
             return ["patch_off_object"], [0]
         graph_evidences = []
         for graph_id in graph_ids:
-            graph_evidences.append(np.max(self.evidence[graph_id]))
+            graph_evidences.append(np.max(self.get_normalized_evidences(graph_id)))
         return graph_ids, np.array(graph_evidences)
+
+    def get_ages_for_object(self, object_id):
+        mapper = self.channel_hypothesis_mapping[object_id]
+        if hasattr(self.hypotheses_updater, "slope_trackers"):
+            trackers = self.hypotheses_updater.evidence_slope_trackers
+            if object_id in trackers and mapper.channels:
+                ages = np.concatenate(
+                    [
+                        trackers[object_id].hyp_ages(channel)
+                        for channel in mapper.channels
+                    ]
+                )
+        else:
+            ages = np.array([len(self.buffer)] * len(self.evidence[object_id]))
+
+        return ages
+
+    def get_normalized_evidences_for_object(self, object_id):
+        evidence = self.evidence[object_id]
+        ages = self.get_ages_for_object(object_id)
+        slope = evidence / ages
+
+        # penalty = np.exp(-ages / 10)
+        # adj = slope - penalty * np.abs(slope)
+        # adj = slope * (1 - penalty)
+        return slope
+
+    def get_normalized_evidences(self, object_id=None):
+        """Return normalized evidence for each pose on each graph."""
+        if object_id is not None:
+            if self.use_normalized_evidence:
+                return self.get_normalized_evidences_for_object(object_id)
+            return self.evidence[object_id]
+
+        if self.use_normalized_evidence:
+            evidences = {
+                g: self.get_normalized_evidences_for_object(g)
+                for g in self.evidence.keys()
+            }
+        return evidences
+
+        # return self.evidence
 
     def get_all_evidences(self):
         """Return evidence for each pose on each graph (pointer)."""
@@ -751,7 +796,7 @@ class EvidenceGraphLM(GraphLM):
             self.evidence_threshold_config,
             self.x_percent_threshold,
             max_global_evidence=self.current_mlh["evidence"],
-            evidence_all_channels=self.evidence[graph_id],
+            evidence_all_channels=self.get_normalized_evidences(graph_id),
         )
 
         hypotheses_updates, hypotheses_update_telemetry = (
@@ -1131,7 +1176,7 @@ class EvidenceGraphLM(GraphLM):
             "location": self.possible_locations[graph_id][mlh_id],
             "rotation": Rotation.from_matrix(self.possible_poses[graph_id][mlh_id]),
             "scale": self.get_object_scale(graph_id),
-            "evidence": self.evidence[graph_id][mlh_id],
+            "evidence": self.get_normalized_evidences(graph_id)[mlh_id],
         }
         return mlh_dict
 
@@ -1146,13 +1191,13 @@ class EvidenceGraphLM(GraphLM):
         """
         mlh = {}
         if graph_id is not None:
-            mlh_id = np.argmax(self.evidence[graph_id])
+            mlh_id = np.argmax(self.get_normalized_evidences(graph_id))
             mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
         else:
             highest_evidence_so_far = -np.inf
             for graph_id in self.get_all_known_object_ids():
-                mlh_id = np.argmax(self.evidence[graph_id])
-                evidence = self.evidence[graph_id][mlh_id]
+                mlh_id = np.argmax(self.get_normalized_evidences(graph_id))
+                evidence = self.get_normalized_evidences(graph_id)[mlh_id]
                 if evidence > highest_evidence_so_far:
                     mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
                     highest_evidence_so_far = evidence
@@ -1186,6 +1231,6 @@ class EvidenceGraphLM(GraphLM):
         stats["possible_locations"] = self.possible_locations
         if get_rotations:
             stats["possible_rotations"] = self.get_possible_poses(as_euler=False)
-        stats["evidences"] = self.evidence
+        stats["evidences"] = self.get_normalized_evidences()
         stats["symmetry_evidence"] = self.symmetry_evidence
         return stats
