@@ -44,6 +44,7 @@ for exp_name, cfg in asdict(experiments).items():
     if exp_name in [
         "base_config_10distinctobj_dist_agent",
         "randrot_noise_10distinctobj_dist_agent",
+        "randrot_noise_77obj_dist_agent",
     ]:
         mod_exp_name = "simple_" + exp_name
         mod_cfg = cfg.copy()
@@ -51,7 +52,7 @@ for exp_name, cfg in asdict(experiments).items():
         test_rotation = get_cube_face_and_corner_views_rotations()[2:3]
         mod_cfg["experiment_args"]["n_eval_epochs"] = len(test_rotation)
         mod_cfg["eval_dataloader_args"] = EnvironmentDataloaderPerObjectArgs(
-            object_names=["mug", "banana"],
+            object_names=["mug"],
             object_init_sampler=PredefinedObjectInitializer(rotations=test_rotation),
         )
         mod_cfg["logging_config"] = DetailedEvidenceLMLoggingConfig(
@@ -60,19 +61,21 @@ for exp_name, cfg in asdict(experiments).items():
                 DetailedJSONHandler,
                 # ReproduceEpisodeHandler,
             ],
-            wandb_handlers=[],
+            # wandb_handlers=[],
+            wandb_handlers=mod_cfg["logging_config"]["wandb_handlers"],
         )
 
         # === MODS === #
 
         lm_args = {
-            "use_normalized_evidence": True,
-            # "object_evidence_threshold": 0,
+            "use_normalized_evidence": False,
+            # "object_evidence_threshold": -1,
+            # "evidence_threshold_config": "all",
         }
 
         updater_args = {
-            "resampling_multiplier": 0.1,
-            "evidence_slope_threshold": 0.3,
+            "resampling_multiplier": 0.0,
+            "evidence_slope_threshold": -1.0,
             "include_telemetry": True,
         }
 
@@ -111,6 +114,9 @@ experiments = SimpleYcbExperiments(
     ],
     simple_base_config_10distinctobj_dist_agent=simple_ycb_experiments[
         "simple_base_config_10distinctobj_dist_agent"
+    ],
+    simple_randrot_noise_77obj_dist_agent=simple_ycb_experiments[
+        "simple_randrot_noise_77obj_dist_agent"
     ],
 )
 
