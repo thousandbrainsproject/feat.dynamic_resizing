@@ -505,6 +505,13 @@ class EvidenceGraphLM(GraphLM):
             graph_id = None
         self.detected_object = graph_id
 
+    def _remap_hypotheses(self, hyp_ids, removed_ids):
+        r = np.unique(removed_ids)
+        h = np.asarray(self.last_possible_hypotheses)
+        shifts = np.searchsorted(r, h, side="left")
+        keep = ~np.isin(h, r, assume_unique=False)
+        return (h - shifts)[keep].tolist()
+
     def get_unique_pose_if_available(self, object_id):
         """Get the most likely pose of an object if narrowed down.
 
@@ -522,6 +529,17 @@ class EvidenceGraphLM(GraphLM):
                 object_id, possible_object_hypotheses_ids, mlh["rotation"]
             )
             # Check for symmetry
+            if (
+                self.last_possible_hypotheses is not None
+                and object_id in self.hypotheses_updater_telemetry
+            ):
+                telemetry = self.hypotheses_updater_telemetry[object_id]
+                channels = list(telemetry.keys())
+                assert len(channels) == 1
+                removed_ids = telemetry[channels[0]]["removed_ids"]
+                self.last_possible_hypotheses = self._remap_hypotheses(
+                    self.last_possible_hypotheses, removed_ids
+                )
             symmetry_detected = self._check_for_symmetry(
                 possible_object_hypotheses_ids,
                 # Don't increment symmetry counter if LM didn't process observation
