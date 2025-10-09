@@ -213,6 +213,9 @@ class ResamplingHypothesesUpdater:
         # Dictionary of slope trackers, one for each graph_id
         self.evidence_slope_trackers: dict[str, EvidenceSlopeTracker] = {}
 
+        # Dictionary of max hypothesis space sizes
+        self.max_hyp_space_size: dict[str, int] = {}
+
     def update_hypotheses(
         self,
         hypotheses: Hypotheses,
@@ -401,6 +404,7 @@ class ResamplingHypothesesUpdater:
         # Should we remove this now that we are resampling? We can sample the
         # same number of hypotheses during initialization as in every other step.
         if input_channel not in mapper.channels:
+            self.max_hyp_space_size[graph_id] = full_informed_count
             return HypothesesSelection(maintain_mask=[]), full_informed_count
 
         # This makes sure that we do not request more than the available number of
@@ -415,6 +419,14 @@ class ResamplingHypothesesUpdater:
         hypotheses_selection = tracker.select_hypotheses(
             slope_threshold=self.evidence_slope_threshold, channel=input_channel
         )
+
+        # maximum_new_informed = self.max_hyp_space_size[graph_id] - len(
+        #     hypotheses_selection.maintain_ids
+        # )
+        # maximum_new_informed -= maximum_new_informed % num_hyps_per_node
+        # new_informed = min(new_informed, maximum_new_informed)
+        # new_informed = max(0, new_informed)
+        # assert mapper.channel_size("patch") <= self.max_hyp_space_size[graph_id]
 
         return (
             hypotheses_selection,
