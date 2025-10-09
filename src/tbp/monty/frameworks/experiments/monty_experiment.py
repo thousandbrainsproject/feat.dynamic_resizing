@@ -521,9 +521,12 @@ class MontyExperiment:
             for _ in range(num_episodes):
                 self.run_episode()
         elif isinstance(self.dataloader, EnvironmentDataLoaderPerObject):
-            for object_name in self.dataloader.object_names:
-                logger.info(f"Running a simulation to model object: {object_name}")
-                self.run_episode()
+            for ep_ix, object_name in enumerate(self.dataloader.object_names):
+                if ep_ix <= 3 or True:
+                    logger.info(f"Running a simulation to model object: {object_name}")
+                    self.run_episode()
+                else:
+                    break
         else:
             logger.info("Running single episode")
             self.run_episode()
@@ -568,8 +571,11 @@ class MontyExperiment:
         # of dataloader number of rotations
         self.logger_handler.pre_eval(self.logger_args)
         self.model.set_experiment_mode("eval")
-        for _ in range(self.n_eval_epochs):
-            self.run_epoch()
+        for ep_ix in range(self.n_eval_epochs):
+            if ep_ix <= 0 or True:
+                self.run_epoch()
+            else:
+                break
         self.logger_handler.post_eval(self.logger_args)
 
     def state_dict(self):
