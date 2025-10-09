@@ -528,6 +528,7 @@ class EvidenceGraphLM(GraphLM):
             pose_is_unique = self._check_for_unique_poses(
                 object_id, possible_object_hypotheses_ids, mlh["rotation"]
             )
+
             # Check for symmetry
             if (
                 self.last_possible_hypotheses is not None
@@ -715,6 +716,8 @@ class EvidenceGraphLM(GraphLM):
         # penalty = np.exp(-ages / 10)
         # adj = slope - penalty * np.abs(slope)
         # adj = slope * (1 - penalty)
+        # return adj
+
         return slope
 
     def get_normalized_evidences(self, object_id=None):
@@ -729,9 +732,8 @@ class EvidenceGraphLM(GraphLM):
                 g: self.get_normalized_evidences_for_object(g)
                 for g in self.evidence.keys()
             }
-        return evidences
-
-        # return self.evidence
+            return evidences
+        return self.evidence
 
     def get_all_evidences(self):
         """Return evidence for each pose on each graph (pointer)."""
@@ -815,7 +817,7 @@ class EvidenceGraphLM(GraphLM):
             self.evidence_threshold_config,
             self.x_percent_threshold,
             max_global_evidence=self.current_mlh["evidence"],
-            evidence_all_channels=self.get_normalized_evidences(graph_id),
+            evidence_all_channels=self.evidence[graph_id],
         )
 
         hypotheses_updates, hypotheses_update_telemetry = (
@@ -1152,10 +1154,17 @@ class EvidenceGraphLM(GraphLM):
             logger.info("no objects in memory yet.")
             return []
         graph_ids, graph_evidences = self.get_evidence_for_each_graph()
+
         # median_ge = np.median(graph_evidences)
         mean_ge = np.mean(graph_evidences)
         max_ge = np.max(graph_evidences)
         std_ge = np.std(graph_evidences)
+
+        if self.use_normalized_evidence:
+            # median_ge = np.median(graph_evidences) * len(self.buffer)
+            # mean_ge *= len(self.buffer)
+            # max_ge *= len(self.buffer)
+            std_ge *= len(self.buffer)
 
         if (std_ge > 0.1) or (max_ge < 0):
             # If all evidences are below 0, return no possible objects
@@ -1198,7 +1207,8 @@ class EvidenceGraphLM(GraphLM):
             "location": self.possible_locations[graph_id][mlh_id],
             "rotation": Rotation.from_matrix(self.possible_poses[graph_id][mlh_id]),
             "scale": self.get_object_scale(graph_id),
-            "evidence": self.get_normalized_evidences(graph_id)[mlh_id],
+            # "evidence": self.get_normalized_evidences(graph_id)[mlh_id],
+            "evidence": self.evidence[graph_id][mlh_id],
         }
         return mlh_dict
 
