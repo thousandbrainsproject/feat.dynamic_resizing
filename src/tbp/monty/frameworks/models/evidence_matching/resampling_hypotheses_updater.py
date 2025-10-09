@@ -70,6 +70,13 @@ class ChannelHypothesesResamplingTelemetry:
     removed_ids: npt.NDArray[np.int_]
 
 
+@dataclass
+class ChannelHypothesesDisplacerTelemetry:
+    """Hypotheses displacer resampling telemetry for a channel."""
+
+    num_hyp_updated: float
+
+
 class ResamplingHypothesesUpdater:
     """Hypotheses updater that resamples hypotheses at every step.
 
@@ -204,6 +211,7 @@ class ResamplingHypothesesUpdater:
             present_weight=present_weight,
             tolerances=self.tolerances,
             use_features_for_matching=self.use_features_for_matching,
+            include_telemetry=include_telemetry,
         )
 
         # resampling multiplier should not be less than 0 (no resampling)
@@ -297,7 +305,7 @@ class ResamplingHypothesesUpdater:
             # We only displace existing hypotheses since the newly resampled hypotheses
             # should not be affected by the displacement from the last sensory input.
             if len(hypotheses_selection.maintain_ids) > 0:
-                existing_hypotheses = (
+                existing_hypotheses, displacer_telemetry = (
                     self.hypotheses_displacer.displace_hypotheses_and_compute_evidence(
                         channel_displacement=displacements[input_channel],
                         channel_features=features[input_channel],
@@ -337,6 +345,19 @@ class ResamplingHypothesesUpdater:
                         ages=tracker.hyp_ages(input_channel),
                         evidence_slopes=tracker.calculate_slopes(input_channel),
                         removed_ids=hypotheses_selection.remove_ids,
+                    ),
+                )
+
+                num_hyp_updated = (
+                    0
+                    if len(hypotheses_selection.maintain_ids) <= 0
+                    else displacer_telemetry["num_hyp_updated"]
+                )
+                resampling_telemetry[input_channel].update(
+                    asdict(
+                        ChannelHypothesesDisplacerTelemetry(
+                            num_hyp_updated=num_hyp_updated
+                        )
                     )
                 )
 

@@ -81,6 +81,7 @@ class DefaultHypothesesDisplacer:
         max_nneighbors: int = 3,
         past_weight: float = 1,
         present_weight: float = 1,
+        include_telemetry: bool = False,
     ):
         """Initializes the DefaultHypothesesDisplacer.
 
@@ -116,6 +117,7 @@ class DefaultHypothesesDisplacer:
                 efficient policy and better parameters that may be possible to use
                 though and could help when moving from one object to another and to
                 generally make setting thresholds etc. more intuitive.
+            include_telemetry: Boolean flag to determine whether to return telemetry.
         """
         self.feature_evidence_calculator = feature_evidence_calculator
         self.feature_evidence_increment = feature_evidence_increment
@@ -127,6 +129,7 @@ class DefaultHypothesesDisplacer:
         self.present_weight = present_weight
         self.tolerances = tolerances
         self.use_features_for_matching = use_features_for_matching
+        self.include_telemetry = include_telemetry
 
     def displace_hypotheses_and_compute_evidence(
         self,
@@ -181,12 +184,18 @@ class DefaultHypothesesDisplacer:
         else:
             evidence = possible_hypotheses.evidence
 
+        telemetry = (
+            {"num_hyp_updated": num_hypotheses_to_test}
+            if self.include_telemetry
+            else None
+        )
+
         return ChannelHypotheses(
             input_channel=possible_hypotheses.input_channel,
             evidence=evidence,
             locations=search_locations,
             poses=possible_hypotheses.poses,
-        )
+        ), telemetry
 
     def _calculate_evidence_for_new_locations(
         self,
