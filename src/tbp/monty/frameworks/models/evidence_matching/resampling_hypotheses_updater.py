@@ -42,7 +42,6 @@ from tbp.monty.frameworks.utils.evidence_matching import (
     ChannelMapper,
     EvidenceSlopeTracker,
     HypothesesSelection,
-    InvalidEvidenceThresholdConfig,
 )
 from tbp.monty.frameworks.utils.graph_matching_utils import (
     get_initial_possible_poses,
@@ -172,11 +171,11 @@ class ResamplingHypothesesUpdater:
                 set to "all".
 
         """
-        if evidence_threshold_config != "all":
-            raise InvalidEvidenceThresholdConfig(
-                "evidence_threshold_config must be "
-                "'all' for `ResamplingHypothesesUpdater`"
-            )
+        # if evidence_threshold_config != "all":
+        #     raise InvalidEvidenceThresholdConfig(
+        #         "evidence_threshold_config must be "
+        #         "'all' for `ResamplingHypothesesUpdater`"
+        #     )
 
         self.feature_evidence_calculator = feature_evidence_calculator
         self.feature_evidence_increment = feature_evidence_increment
