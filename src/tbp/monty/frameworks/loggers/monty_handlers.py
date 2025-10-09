@@ -8,6 +8,8 @@
 # license that can be found in the LICENSE file or at
 # https://opensource.org/licenses/MIT.
 
+from __future__ import annotations
+
 import abc
 import copy
 import json
@@ -55,8 +57,32 @@ class MontyHandler(metaclass=abc.ABCMeta):
 class DetailedJSONHandler(MontyHandler):
     """Grab any logs at the DETAILED level and append to a json file."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        episodes_to_save: list[int] | None = None,
+        parallel_episode_index: int | None = None,
+        save_per_episode: bool = False,
+    ) -> None:
+        """Initialize the DetailedJSONHandler.
+
+        Args:
+            episodes_to_save: List of episodes to save. If None, all episodes are
+                appended to a consolidated file called detailed_run_stats.json.
+            parallel_episode_index: Global episode number associated with
+                this run when generated via parallel configs. Defaults to None.
+            save_per_episode: Whether to save individual episode files or
+                consolidate into a single detailed_run_stats.json file.
+                Defaults to False.
+        """
         self.report_count = 0
+        self.saved_episode_count = 0
+        self.parallel_episode_index = parallel_episode_index
+        self.episodes_to_save = episodes_to_save
+        self.save_per_episode = save_per_episode
+        if self.episodes_to_save is not None and len(self.episodes_to_save) == 0:
+            logger.info(
+                "episodes_to_save is empty; no detailed episode files will be written"
+            )
 
     @classmethod
     def log_level(cls):
@@ -70,24 +96,77 @@ class DetailedJSONHandler(MontyHandler):
         """
         output_data = {}
         if mode == "train":
-            total = kwargs["train_episodes_to_total"][episode]
+            local_total = kwargs["train_episodes_to_total"][episode]
             stats = data["BASIC"]["train_stats"][episode]
 
         elif mode == "eval":
-            total = kwargs["eval_episodes_to_total"][episode]
+            local_total = kwargs["eval_episodes_to_total"][episode]
             stats = data["BASIC"]["eval_stats"][episode]
 
-        output_data[total] = copy.deepcopy(stats)
-        output_data[total].update(data["DETAILED"][total])
+        global_total = (
+            self.parallel_episode_index
+            if self.parallel_episode_index is not None
+            else local_total
+        )
 
-        save_stats_path = os.path.join(output_dir, "detailed_run_stats.json")
-        maybe_rename_existing_file(save_stats_path, ".json", self.report_count)
+        save_individual = self.save_per_episode and (
+            self.episodes_to_save is None or global_total in self.episodes_to_save
+        )
 
-        with open(save_stats_path, "a") as f:
-            json.dump({total: output_data[total]}, f, cls=BufferEncoder)
-            f.write(os.linesep)
+        if (
+            self.episodes_to_save is not None
+            and global_total not in self.episodes_to_save
+        ):
+            logger.debug(
+                "Skipping detailed JSON for episode %s (not requested)", global_total
+            )
+            self.report_count += 1
+            return
 
-        print("Stats appended to " + save_stats_path)
+        output_data[global_total] = copy.deepcopy(stats)
+        output_data[global_total].update(data["DETAILED"][local_total])
+
+        if save_individual:
+            episodes_dir = os.path.join(output_dir, "detailed_run_stats")
+            os.makedirs(episodes_dir, exist_ok=True)
+
+            episode_file = os.path.join(
+                episodes_dir, f"episode_{global_total:06d}.json"
+            )
+            maybe_rename_existing_file(
+                episode_file, ".json", 0 if self.saved_episode_count == 0 else 1
+            )
+            with open(episode_file, "w") as f:
+                json.dump(
+                    {global_total: output_data[global_total]},
+                    f,
+                    cls=BufferEncoder,
+                    indent=2,
+                )
+
+            logger.debug(
+                "Saved detailed JSON for episode %s to %s", global_total, episode_file
+            )
+            self.saved_episode_count += 1
+
+        else:
+            save_stats_path = os.path.join(output_dir, "detailed_run_stats.json")
+            maybe_rename_existing_file(
+                save_stats_path, ".json", 0 if self.saved_episode_count == 0 else 1
+            )
+
+            with open(save_stats_path, "a") as f:
+                json.dump(
+                    {global_total: output_data[global_total]}, f, cls=BufferEncoder
+                )
+                f.write(os.linesep)
+
+            logger.debug(
+                "Appended detailed stats for episode %s to %s",
+                global_total,
+                save_stats_path,
+            )
+            self.saved_episode_count += 1
         self.report_count += 1
 
     def close(self):
