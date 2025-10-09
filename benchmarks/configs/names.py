@@ -83,6 +83,7 @@ class YcbExperiments:
 class SimpleYcbExperiments:
     simple_randrot_noise_10distinctobj_dist_agent: dict
     simple_base_config_10distinctobj_dist_agent: dict
+    simple_base_77obj_surf_agent: dict
     simple_randrot_noise_77obj_dist_agent: dict
 
 

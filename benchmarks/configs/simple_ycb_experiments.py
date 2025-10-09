@@ -44,6 +44,7 @@ for exp_name, cfg in asdict(experiments).items():
     if exp_name in [
         "base_config_10distinctobj_dist_agent",
         "randrot_noise_10distinctobj_dist_agent",
+        "base_77obj_surf_agent",
         "randrot_noise_77obj_dist_agent",
     ]:
         mod_exp_name = "simple_" + exp_name
@@ -70,12 +71,12 @@ for exp_name, cfg in asdict(experiments).items():
         lm_args = {
             "use_normalized_evidence": False,
             # "object_evidence_threshold": -1,
-            # "evidence_threshold_config": "all",
+            "evidence_threshold_config": "all",
         }
 
         updater_args = {
-            "resampling_multiplier": 0.0,
-            "evidence_slope_threshold": -1.0,
+            "resampling_multiplier": 0.1,
+            "evidence_slope_threshold": 0.3,
             "include_telemetry": True,
         }
 
@@ -115,6 +116,7 @@ experiments = SimpleYcbExperiments(
     simple_base_config_10distinctobj_dist_agent=simple_ycb_experiments[
         "simple_base_config_10distinctobj_dist_agent"
     ],
+    simple_base_77obj_surf_agent=simple_ycb_experiments["simple_base_77obj_surf_agent"],
     simple_randrot_noise_77obj_dist_agent=simple_ycb_experiments[
         "simple_randrot_noise_77obj_dist_agent"
     ],

@@ -14,6 +14,9 @@ import numpy as np
 from tbp.monty.frameworks.models.evidence_matching.learning_module import (
     EvidenceGraphLM,
 )
+from tbp.monty.frameworks.models.evidence_matching.resampling_hypotheses_updater import (
+    ResamplingHypothesesUpdater,
+)
 from tbp.monty.frameworks.models.goal_state_generation import EvidenceGoalStateGenerator
 from tbp.monty.frameworks.models.sensor_modules import FeatureChangeSM
 
@@ -77,10 +80,6 @@ default_evidence_lm_config = dict(
         feature_weights=default_feature_weights,
         # smaller threshold reduces runtime but also performance
         x_percent_threshold=20,
-        # Use this to update all hypotheses at every step as previously
-        # evidence_threshold_config="all",
-        # Use this to update all hypotheses with evidence > 80% of max evidence (faster)
-        evidence_threshold_config="80%",
         # use_multithreading=False,
         # NOTE: Currently not used when loading pretrained graphs.
         max_graph_size=0.3,  # 30cm
@@ -101,10 +100,18 @@ default_evidence_lm_config = dict(
             desired_object_distance=0.03,  # Distance from the object to the
             # agent that is considered "close enough" to the object
         ),
+        use_multithreading=True,
+        evidence_threshold_config="all",
+        use_normalized_evidence=False,
+        # object_evidence_threshold=-1,
+        hypotheses_updater_class=ResamplingHypothesesUpdater,
         hypotheses_updater_args=dict(
             # Using a smaller max_nneighbors (5 instead of 10) makes runtime faster,
             # but reduces performance a bit
-            max_nneighbors=10
+            resampling_multiplier=0.1,
+            evidence_slope_threshold=0.3,
+            include_telemetry=True,
+            max_nneighbors=10,
         ),
     ),
 )
