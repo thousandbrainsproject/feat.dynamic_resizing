@@ -32,14 +32,14 @@ class HypothesesUpdaterChannelTelemetry:
 
     hypotheses_updater: dict[str, Any]
     """Any telemetry from the hypotheses updater."""
-    evidence: npt.NDArray[np.float64]
+    # evidence: npt.NDArray[np.float64]
     """The hypotheses evidence scores."""
-    rotations: npt.NDArray[np.float64]
+    # rotations: npt.NDArray[np.float64]
     """Rotations of the hypotheses.
 
     Note that the buffer encoder will encode those as euler "xyz" rotations in degrees.
     """
-    locations: npt.NDArray[np.float64]
+    # locations: npt.NDArray[np.float64]
     """Locations of the hypotheses."""
 
     pose_errors: npt.NDArray[np.float64]
@@ -148,9 +148,9 @@ class TheoreticalLimitLMLoggingMixin:
 
         return HypothesesUpdaterChannelTelemetry(
             hypotheses_updater=channel_telemetry.copy(),
-            evidence=channel_evidence,
-            rotations=channel_rotations_inv,
-            locations=channel_locations,
+            # evidence=channel_evidence,
+            # rotations=channel_rotations_inv,
+            # locations=channel_locations,
             pose_errors=cast(
                 npt.NDArray[np.float64],
                 compute_pose_errors(
