@@ -244,7 +244,7 @@ default_5sm_config = dict(
         sensor_module_class=DetailedLoggingSM,
         sensor_module_args=dict(
             sensor_module_id="view_finder",
-            save_raw_obs=True,
+            save_raw_obs=False,
         ),
     ),
 )
@@ -306,7 +306,7 @@ randrot_noise_10distinctobj_dist_agent.update(
                 sensor_module_class=DetailedLoggingSM,
                 sensor_module_args=dict(
                     sensor_module_id="view_finder",
-                    save_raw_obs=True,
+                    save_raw_obs=False,
                 ),
             ),
         ),
@@ -347,7 +347,7 @@ randrot_noise_10distinctobj_surf_agent.update(
                 sensor_module_class=DetailedLoggingSM,
                 sensor_module_args=dict(
                     sensor_module_id="view_finder",
-                    save_raw_obs=True,
+                    save_raw_obs=False,
                 ),
             ),
         ),
@@ -533,7 +533,7 @@ surf_agent_unsupervised_10distinctobj_noise.update(
                 sensor_module_class=DetailedLoggingSM,
                 sensor_module_args=dict(
                     sensor_module_id="view_finder",
-                    save_raw_obs=True,
+                    save_raw_obs=False,
                 ),
             ),
         ),

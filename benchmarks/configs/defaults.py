@@ -71,6 +71,11 @@ default_tolerances = {
     "patch": default_tolerance_values
 }  # features where weight is not specified default weight to 1
 
+
+# class EvidenceGraphLMLogging(TheoreticalLimitLMLoggingMixin, EvidenceGraphLM):
+#     pass
+
+
 default_evidence_lm_config = dict(
     learning_module_class=EvidenceGraphLM,
     learning_module_args=dict(
@@ -101,6 +106,7 @@ default_evidence_lm_config = dict(
             # agent that is considered "close enough" to the object
         ),
         use_multithreading=True,
+        # evidence_threshold_config="80%",
         evidence_threshold_config="all",
         use_normalized_evidence=False,
         # object_evidence_threshold=-1,
