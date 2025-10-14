@@ -309,6 +309,32 @@ class EvidenceSlopeTrackerTest(unittest.TestCase):
         np.testing.assert_array_equal(selection.maintain_mask, expected_keep_mask)
         np.testing.assert_array_equal(selection.remove_mask, expected_remove_mask)
 
+    def test_select_hypotheses_keeps_min_maintained(self) -> None:
+        """Test that `min_maintained_hyps` adds only as many highest-slope hyps."""
+        self.tracker.add_hyp(5, self.channel)
+
+        # slopes are [1, 0.5, 0, -1, -0.5]
+        self.tracker.update(np.array([1.0, 1.0, 1.0, 3.0, 2.0]), self.channel)
+        self.tracker.update(np.array([2.0, 1.5, 1.0, 2.0, 1.5]), self.channel)
+        self.tracker.update(np.array([3.0, 2.0, 1.0, 1.0, 1.0]), self.channel)
+
+        # Make only the last hypotheses non-removable
+        self.tracker.hyp_age[self.channel] = np.array([10, 10, 10, 10, 0], dtype=int)
+
+        selection = self.tracker.select_hypotheses(
+            slope_threshold=+np.inf,  # nothing passes by slope
+            min_maintained_hyps=2,  # should end with exactly two kept
+            channel=self.channel,
+        )
+
+        # Id 4 is maintained because of it's age,
+        # Id 0 is maintained because we need one more hypothesis (chosen based on slope)
+        expected_keep_mask = np.array([True, False, False, False, True], dtype=bool)
+        expected_remove_mask = ~expected_keep_mask
+
+        np.testing.assert_array_equal(selection.maintain_mask, expected_keep_mask)
+        np.testing.assert_array_equal(selection.remove_mask, expected_remove_mask)
+
 
 if __name__ == "__main__":
     unittest.main()
