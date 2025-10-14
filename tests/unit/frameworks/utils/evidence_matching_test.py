@@ -291,7 +291,9 @@ class EvidenceSlopeTrackerTest(unittest.TestCase):
         self.tracker.hyp_age[self.channel] = np.array([3, 3, 3, 1], dtype=int)
 
         selection = self.tracker.select_hypotheses(
-            slope_threshold=-0.5, channel=self.channel
+            slope_threshold=-0.5,
+            min_maintained_hyps=0,
+            channel=self.channel,
         )
 
         # 0,1 have higher slopes, 3 is too young
