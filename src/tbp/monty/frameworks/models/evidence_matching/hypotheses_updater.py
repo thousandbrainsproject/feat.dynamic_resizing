@@ -13,6 +13,7 @@ import logging
 from typing import Any, Dict, Literal, Optional, Protocol
 
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial.transform import Rotation
 
 from tbp.monty.frameworks.models.evidence_matching.feature_evidence.calculator import (
@@ -71,6 +72,22 @@ class HypothesesUpdater(Protocol):
 
         Returns:
             The list of channel hypotheses updates to be applied.
+        """
+        ...
+
+    def update_last_possible_hypotheses(
+        self,
+        hypotheses_ids: npt.NDArray[np.int64],
+        graph_id: str,
+    ) -> npt.NDArray[np.int64]:
+        """Update hypotheses ids based on resizing of hypothesis space.
+
+        Args:
+            hypotheses_ids: Hypotheses ids to be updated
+            graph_id: Identifier of the graph being updated
+
+        Returns:
+            The list of the updated hypotheses ids.
         """
         ...
 
@@ -384,6 +401,25 @@ class DefaultHypothesesUpdater:
             locations=initial_possible_channel_locations,
             poses=initial_possible_channel_rotations,
         )
+
+    def update_last_possible_hypotheses(
+        self,
+        hypotheses_ids: npt.NDArray[np.int64],
+        graph_id: str,
+    ) -> npt.NDArray[np.int64]:
+        """Update hypotheses ids based on resizing of hypothesis space.
+
+        We do not resize the hypotheses space when using `DefaultHypothesesUpdater`,
+        therefore, we return the same ids.
+
+        Args:
+            hypotheses_ids: Hypotheses ids to be updated
+            graph_id: Identifier of the graph being updated
+
+        Returns:
+            The list of the updated hypotheses ids.
+        """
+        return hypotheses_ids
 
 
 def all_usable_input_channels(

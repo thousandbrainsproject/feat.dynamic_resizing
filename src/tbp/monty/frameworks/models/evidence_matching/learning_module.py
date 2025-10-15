@@ -517,17 +517,23 @@ class EvidenceGraphLM(GraphLM):
         # Only try to determine object pose if the evidence for it is high enough.
         if possible_object_hypotheses_ids is not None:
             mlh = self.get_current_mlh()
+
             # Check if all possible poses are similar
             pose_is_unique = self._check_for_unique_poses(
                 object_id, possible_object_hypotheses_ids, mlh["rotation"]
             )
+
             # Check for symmetry
+            self.last_possible_hypotheses = (
+                self.hypotheses_updater.update_last_possible_hypotheses(
+                    self.last_possible_hypotheses, object_id
+                )
+            )
             symmetry_detected = self._check_for_symmetry(
                 possible_object_hypotheses_ids,
                 # Don't increment symmetry counter if LM didn't process observation
                 increment_evidence=self.buffer.get_last_obs_processed(),
             )
-
             self.last_possible_hypotheses = possible_object_hypotheses_ids
 
             if pose_is_unique or symmetry_detected:
