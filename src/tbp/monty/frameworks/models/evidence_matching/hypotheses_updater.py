@@ -13,7 +13,6 @@ import logging
 from typing import Any, Dict, Literal, Optional, Protocol
 
 import numpy as np
-import numpy.typing as npt
 from scipy.spatial.transform import Rotation
 
 from tbp.monty.frameworks.models.evidence_matching.feature_evidence.calculator import (
@@ -34,7 +33,10 @@ from tbp.monty.frameworks.models.evidence_matching.hypotheses import (
 from tbp.monty.frameworks.models.evidence_matching.hypotheses_displacer import (
     DefaultHypothesesDisplacer,
 )
-from tbp.monty.frameworks.utils.evidence_matching import ChannelMapper
+from tbp.monty.frameworks.utils.evidence_matching import (
+    ChannelMapper,
+    ConsistentHypothesesIds,
+)
 from tbp.monty.frameworks.utils.graph_matching_utils import (
     get_initial_possible_poses,
     possible_sensed_directions,
@@ -76,15 +78,12 @@ class HypothesesUpdater(Protocol):
         ...
 
     def update_last_possible_hypotheses(
-        self,
-        hypotheses_ids: npt.NDArray[np.int64],
-        graph_id: str,
-    ) -> npt.NDArray[np.int64]:
+        self, hypotheses_ids: ConsistentHypothesesIds
+    ) -> ConsistentHypothesesIds:
         """Update hypotheses ids based on resizing of hypothesis space.
 
         Args:
             hypotheses_ids: Hypotheses ids to be updated
-            graph_id: Identifier of the graph being updated
 
         Returns:
             The list of the updated hypotheses ids.
@@ -403,18 +402,15 @@ class DefaultHypothesesUpdater:
         )
 
     def update_last_possible_hypotheses(
-        self,
-        hypotheses_ids: npt.NDArray[np.int64],
-        graph_id: str,
-    ) -> npt.NDArray[np.int64]:
+        self, hypotheses_ids: ConsistentHypothesesIds
+    ) -> ConsistentHypothesesIds:
         """Update hypotheses ids based on resizing of hypothesis space.
 
         We do not resize the hypotheses space when using `DefaultHypothesesUpdater`,
-        therefore, we return the same ids.
+        therefore, we return the same ids without update.
 
         Args:
             hypotheses_ids: Hypotheses ids to be updated
-            graph_id: Identifier of the graph being updated
 
         Returns:
             The list of the updated hypotheses ids.
