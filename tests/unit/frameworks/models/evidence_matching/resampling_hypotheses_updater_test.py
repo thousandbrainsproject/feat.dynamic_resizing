@@ -296,7 +296,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         # new locals after shifting:  [0,1,2,3,4]
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
 
-    def _multi_channel_rebase_due_to_additions(self, updater):
+    def _multi_channel_rebase_due_to_resizing(self, updater):
         updater.resampling_telemetry = {
             "mug": {
                 "patch0": {"removed_ids": [1, 3], "added_ids": [5, 6]},
@@ -314,9 +314,55 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         # new bases are the same since patch0 removed 2 and added 2.
         # So new_bases = [0,5]
 
-        # In patch1: locals ids = [0,2]; removed [2]; new base = 5
+        # In patch1: locals ids = [0,2]; removed = [2]; new base = 5
         # So [5, 7] becomes [5]
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 5]))
+
+    def _rebase_when_first_channel_shrinks(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [1, 3], "added_ids": []},  # shrink by 2
+                "patch1": {"removed_ids": [], "added_ids": []},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug",
+            sizes=[("patch0", 5), ("patch1", 4)],
+            ids=[0, 2, 4, 5, 7],
+        )
+        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+
+        # In patch0: local = [0,2,4]; removed = [1,3]; shifts = [0,1,2]
+        # So [0,2,4] becomes [0,1,2]
+
+        # New bases: [0,3] so patch1 base is 3 (not 5)
+
+        # In patch 1: locals = [0,2]
+        # So [5,7] becomes [3,5]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 5]))
+
+    def _rebase_when_first_channel_grows(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [], "added_ids": [5, 6]},  # grow by 2
+                "patch1": {"removed_ids": [], "added_ids": []},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug",
+            sizes=[("patch0", 5), ("patch1", 4)],
+            ids=[0, 4, 5, 6, 8],
+        )
+        out = updater.update_last_possible_hypotheses(hyp_ids)
+
+        # In patch0: local = [0,4]; added = [5,6]; No shifts
+        # So [0,4] becomes [0,4]
+
+        # New bases: [0,7]
+
+        # In patch 1: locals = [0,2,4]
+        # So [0,1,3] becomes [7,8,10]
+        np.testing.assert_array_equal(out.hypotheses_ids, np.array([0, 4, 7, 8, 10]))
 
     def _all_ids_removed_in_a_channel(self, updater):
         updater.resampling_telemetry = {
@@ -339,4 +385,6 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         self._single_channel_no_changes(updater)
         self._single_channel_with_removals_shifts(updater)
         self._multi_channel_rebase_due_to_additions(updater)
+        self._rebase_when_first_channel_shrinks(updater)
+        self._rebase_when_first_channel_grows(updater)
         self._all_ids_removed_in_a_channel(updater)
