@@ -276,7 +276,9 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         updater.resampling_telemetry = {
             "mug": {"patch": {"removed_ids": [], "added_ids": []}}
         }
-        hyp_ids = make_consistent_ids("mug", [("patch", 5)], [0, 1, 3, 4])
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 5)], ids=[0, 1, 3, 4]
+        )
 
         hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 3, 4]))
@@ -285,7 +287,9 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         updater.resampling_telemetry = {
             "mug": {"patch": {"removed_ids": [1, 4, 6], "added_ids": []}}
         }
-        hyp_ids = make_consistent_ids("mug", [("patch", 8)], [0, 2, 3, 5, 7])
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 8)], ids=[0, 2, 3, 5, 7]
+        )
         hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
 
         # Shift per searchsorted([1,4,6], x, 'left'): 0->0, 2->1, 3->1, 5->2, 7->3
@@ -300,7 +304,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             }
         }
         hyp_ids = make_consistent_ids(
-            "mug", [("patch0", 5), ("patch1", 4)], [0, 2, 4, 5, 7]
+            graph_id="mug", sizes=[("patch0", 5), ("patch1", 4)], ids=[0, 2, 4, 5, 7]
         )
         hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
 
@@ -322,7 +326,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             }
         }
         hyp_ids = make_consistent_ids(
-            "mug", [("patch0", 3), ("patch1", 3)], [0, 1, 2, 3, 4, 5]
+            graph_id="mug", sizes=[("patch0", 3), ("patch1", 3)], ids=[0, 1, 2, 3, 4, 5]
         )
         hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
 
