@@ -433,7 +433,7 @@ class EvidenceSlopeTracker:
             channel: Name of the input channel.
 
         Note that the parameter `min_maintained_hyps` overrides the `slope_threshold`
-        and the removable mask. These hypotheses will be maintained regardless of their
+        and the removable mask. These hypotheses will be maintained in spite of their
         slopes and ages.
 
         Returns:
