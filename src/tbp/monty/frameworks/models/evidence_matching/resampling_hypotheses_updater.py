@@ -659,7 +659,7 @@ class ResamplingHypothesesUpdater:
         rem_counts, add_counts = [], []
         for name in names:
             removed_ids = np.asarray(telemetry[name]["removed_ids"], np.int64)
-            removed_map[name] = np.unique(removed_ids)  # This will sort too
+            removed_map[name] = np.sort(removed_ids)
             rem_counts.append(removed_ids.size)
             add_counts.append(len(telemetry[name]["added_ids"]))
         rem_counts = np.asarray(rem_counts, dtype=np.int64)
