@@ -633,6 +633,11 @@ class ResamplingHypothesesUpdater:
         - Channel-specific id shifting: This uses the `removed_ids` to shift the ids
             within the channel itself.
 
+        Note that we do not remap the full hypothesis space, we only remap
+        a selection of hypotheses ids (defined using `ConsistentHypothesesIds`).
+        To remap the full hypothesis space, `hypotheses_ids` should contain all of
+        the ids in the hypothesis space.
+
         Args:
             hypotheses_ids: Hypotheses ids to be updated
 
