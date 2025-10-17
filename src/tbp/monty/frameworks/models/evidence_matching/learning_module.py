@@ -531,6 +531,7 @@ class EvidenceGraphLM(GraphLM):
                 )
             )
             symmetry_detected = self._check_for_symmetry(
+                object_id,
                 possible_object_hypotheses_ids,
                 # Don't increment symmetry counter if LM didn't process observation
                 increment_evidence=self.buffer.get_last_obs_processed(),
@@ -987,7 +988,9 @@ class EvidenceGraphLM(GraphLM):
         pose_is_unique = location_unique and rotation_unique
         return pose_is_unique
 
-    def _check_for_symmetry(self, possible_object_hypotheses_ids, increment_evidence):
+    def _check_for_symmetry(
+        self, object_id, possible_object_hypotheses_ids, increment_evidence
+    ):
         """Check whether the most likely hypotheses stayed the same over the past steps.
 
         Since the definition of possible_object_hypotheses is a bit murky and depends
@@ -996,6 +999,7 @@ class EvidenceGraphLM(GraphLM):
         not sure if this is the best way to check for symmetry...
 
         Args:
+            object_id: identifier of the object being checked for symmetry
             possible_object_hypotheses_ids: List of IDs of all possible hypotheses.
             increment_evidence: Whether to increment symmetry evidence or not. We
                 may want this to be False for example if we did not receive a new
@@ -1010,7 +1014,7 @@ class EvidenceGraphLM(GraphLM):
             f"\n\nchecking for symmetry for hp ids {possible_object_hypotheses_ids}"
             f" with last ids {self.last_possible_hypotheses}"
         )
-        if increment_evidence:
+        if increment_evidence and self.last_possible_hypotheses.graph_id == object_id:
             previous_hyps = set(self.last_possible_hypotheses.hypotheses_ids)
             current_hyps = set(possible_object_hypotheses_ids)
             hypothesis_overlap = previous_hyps.intersection(current_hyps)
