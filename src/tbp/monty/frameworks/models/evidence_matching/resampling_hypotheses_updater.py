@@ -621,6 +621,10 @@ class ResamplingHypothesesUpdater:
     ) -> ConsistentHypothesesIds:
         """Update hypotheses ids based on resizing of hypothesis space.
 
+        This function will receive hypotheses ids in a hypothesis space from
+        the previous timestep and find the ids of those same hypotheses in the
+        current hypothesis space (i.e. after resizing).
+
         Within a single channel, we only need the `removed_ids` to shift the
         `hypotheses_ids`. This is because `added_ids` are appended to the end
         of the channel. However, when dealing with multiple stacked channels,
@@ -639,10 +643,11 @@ class ResamplingHypothesesUpdater:
         the ids in the hypothesis space.
 
         Args:
-            hypotheses_ids: Hypotheses ids to be updated
+            hypotheses_ids: Previous timestep hypotheses ids to be updated
 
         Returns:
-            The list of the updated hypotheses ids.
+            The list of the updated hypotheses ids in the current timestep/hypothesis
+                space.
         """
         # Exit if no hypotheses_ids or no telemetry for this graph
         if (
