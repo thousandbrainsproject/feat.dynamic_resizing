@@ -77,7 +77,7 @@ class HypothesesUpdater(Protocol):
         """
         ...
 
-    def remap_hypotheses_ids(
+    def remap_hypotheses_ids_to_present(
         self, hypotheses_ids: ConsistentHypothesesIds
     ) -> ConsistentHypothesesIds:
         """Update hypotheses ids based on resizing of hypothesis space.
@@ -401,7 +401,7 @@ class DefaultHypothesesUpdater:
             poses=initial_possible_channel_rotations,
         )
 
-    def remap_hypotheses_ids(
+    def remap_hypotheses_ids_to_present(
         self, hypotheses_ids: ConsistentHypothesesIds
     ) -> ConsistentHypothesesIds:
         """Update hypotheses ids based on resizing of hypothesis space.
