@@ -296,6 +296,25 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         # new locals after shifting:  [0,1,2,3,4]
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
 
+    def _single_channel_full_remap_misses_added(self, updater):
+        """Tests that added ids do not show up in remapping."""
+        added_ids = [5, 6]
+
+        updater.resampling_telemetry = {
+            "mug": {"patch": {"removed_ids": [], "added_ids": added_ids}}
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 5)], ids=list(range(5))
+        )
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
+
+        # In patch0: locals ids = [0,1,2,3,4]; removed = []; shift = [0,0,0,0,0].
+        # So [0,1,2,3,4] becomes [0,1,2,3,4]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
+
+        # Added ids should NOT appear in the remapped ids
+        self.assertFalse(np.isin(added_ids, hyp_ids.hypotheses_ids).any())
+
     def _multi_channel_rebase_due_to_resizing(self, updater):
         updater.resampling_telemetry = {
             "mug": {
@@ -384,6 +403,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
 
         self._single_channel_no_changes(updater)
         self._single_channel_with_removals_shifts(updater)
+        self._single_channel_full_remap_misses_added(updater)
         self._multi_channel_rebase_due_to_resizing(updater)
         self._rebase_when_first_channel_shrinks(updater)
         self._rebase_when_first_channel_grows(updater)
