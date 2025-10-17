@@ -526,7 +526,7 @@ class EvidenceGraphLM(GraphLM):
 
             # Check for symmetry
             self.last_possible_hypotheses = (
-                self.hypotheses_updater.update_last_possible_hypotheses(
+                self.hypotheses_updater.remap_hypotheses_ids(
                     self.last_possible_hypotheses
                 )
             )

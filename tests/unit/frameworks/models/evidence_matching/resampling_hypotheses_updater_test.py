@@ -280,7 +280,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             graph_id="mug", sizes=[("patch", 5)], ids=[0, 1, 3, 4]
         )
 
-        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 3, 4]))
 
     def _single_channel_with_removals_shifts(self, updater):
@@ -290,7 +290,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         hyp_ids = make_consistent_ids(
             graph_id="mug", sizes=[("patch", 8)], ids=[0, 2, 3, 5, 7]
         )
-        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
 
         # Shift per searchsorted([1,4,6], x, 'left'): 0->0, 2->1, 3->1, 5->2, 7->3
         # new locals after shifting:  [0,1,2,3,4]
@@ -306,7 +306,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         hyp_ids = make_consistent_ids(
             graph_id="mug", sizes=[("patch0", 5), ("patch1", 4)], ids=[0, 2, 4, 5, 7]
         )
-        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
 
         # In patch0: locals ids = [0,2,4]; removed = [1,3]; shift = [0,1,2].
         # So [0, 2, 4] becomes [0, 1, 2]
@@ -330,7 +330,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             sizes=[("patch0", 5), ("patch1", 4)],
             ids=[0, 2, 4, 5, 7],
         )
-        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
 
         # In patch0: local = [0,2,4]; removed = [1,3]; shifts = [0,1,2]
         # So [0,2,4] becomes [0,1,2]
@@ -353,7 +353,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             sizes=[("patch0", 5), ("patch1", 4)],
             ids=[0, 4, 5, 6, 8],
         )
-        out = updater.update_last_possible_hypotheses(hyp_ids)
+        out = updater.remap_hypotheses_ids(hyp_ids)
 
         # In patch0: local = [0,4]; added = [5,6]; No shifts
         # So [0,4] becomes [0,4]
@@ -374,17 +374,17 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         hyp_ids = make_consistent_ids(
             graph_id="mug", sizes=[("patch0", 3), ("patch1", 3)], ids=[0, 1, 2, 3, 4, 5]
         )
-        hyp_ids = updater.update_last_possible_hypotheses(hyp_ids)
+        hyp_ids = updater.remap_hypotheses_ids(hyp_ids)
 
         # Removed [0, 1, 2], so [3, 4, 5] was rebased to [0, 1, 2]
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2]))
 
-    def test_update_last_hypotheses_ids(self):
+    def test_remap_hypotheses_ids(self):
         updater = self.get_resampling_updater()
 
         self._single_channel_no_changes(updater)
         self._single_channel_with_removals_shifts(updater)
-        self._multi_channel_rebase_due_to_additions(updater)
+        self._multi_channel_rebase_due_to_resizing(updater)
         self._rebase_when_first_channel_shrinks(updater)
         self._rebase_when_first_channel_grows(updater)
         self._all_ids_removed_in_a_channel(updater)

@@ -615,7 +615,7 @@ class ResamplingHypothesesUpdater:
             evidence=selected_feature_evidence,
         )
 
-    def update_last_possible_hypotheses(
+    def remap_hypotheses_ids(
         self,
         hypotheses_ids: ConsistentHypothesesIds,
     ) -> ConsistentHypothesesIds:
