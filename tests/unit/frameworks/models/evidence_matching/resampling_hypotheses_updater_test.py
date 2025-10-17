@@ -297,7 +297,12 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
 
     def _single_channel_full_remap_misses_added(self, updater):
-        """Tests that added ids do not show up in remapping."""
+        """Tests that added ids do not show up in remapping.
+
+        The remapping function finds the mapping between ids from the previous step
+        to the current time step. The added_ids did not exist in previous steps,
+        therefore should not appear in the mapping.
+        """
         added_ids = [5, 6]
 
         updater.resampling_telemetry = {
