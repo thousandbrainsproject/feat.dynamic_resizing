@@ -612,16 +612,22 @@ class EvidenceGraphLM(GraphLM):
         """
         graph_ids, graph_evidences = self.get_evidence_for_each_graph()
 
+        # If all hypothesis spaces are empty return None for both mlh ids. The gsg will
+        # not generate a goal state.
+        if len(graph_ids) == 0:
+            return None, None
+
+        # If we have a single hypothesis space, return the same object id for both
+        # top two mlh ids. The gsg will focus on pose to generate a goal state.
+        if len(graph_ids) == 1:
+            return graph_ids[0], graph_ids[0]
+
         # Note the indices below will be ordered with the 2nd MLH appearing first, and
         # the 1st MLH appearing second.
         top_indices = np.argsort(graph_evidences)[-2:]
 
-        if len(top_indices) > 1:
-            top_id = graph_ids[top_indices[1]]
-            second_id = graph_ids[top_indices[0]]
-        else:
-            top_id = graph_ids[top_indices[0]]
-            second_id = top_id
+        top_id = graph_ids[top_indices[1]]
+        second_id = graph_ids[top_indices[0]]
 
         return top_id, second_id
 
@@ -680,14 +686,23 @@ class EvidenceGraphLM(GraphLM):
         graph_ids = self.get_all_known_object_ids()
         if graph_ids[0] not in self.evidence.keys():
             return ["patch_off_object"], [0]
-        graph_evidences = []
+
+        valid_graph_ids = []
+        valid_graph_evidences = []
         for graph_id in graph_ids:
-            graph_evidences.append(np.max(self.evidence[graph_id]))
-        return graph_ids, np.array(graph_evidences)
+            if len(self.get_evidence_for_object(graph_id)):
+                valid_graph_ids.append(graph_id)
+                valid_graph_evidences.append(np.max(self.evidence[graph_id]))
+
+        return valid_graph_ids, np.array(valid_graph_evidences)
 
     def get_all_evidences(self):
         """Return evidence for each pose on each graph (pointer)."""
         return self.evidence
+
+    def get_evidence_for_object(self, object_id):
+        """Return evidence for a specific object_id."""
+        return self.evidence[object_id]
 
     # ------------------ Logging & Saving ----------------------
     def collect_stats_to_save(self):
