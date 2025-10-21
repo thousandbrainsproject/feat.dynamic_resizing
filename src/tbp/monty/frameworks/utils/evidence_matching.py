@@ -120,6 +120,8 @@ class ChannelMapper:
     def resize_channel_to(self, channel_name: str, new_size: int) -> None:
         """Sets the size of the given channel to a specific value.
 
+        This function will also delete the channel if the `new_size` is 0.
+
         Args:
             channel_name: The name of the channel.
             new_size: The new size to set for the channel.
@@ -129,9 +131,26 @@ class ChannelMapper:
         """
         if channel_name not in self.channel_sizes:
             raise ValueError(f"Channel '{channel_name}' not found.")
-        if new_size <= 0:
+        if new_size < 0:
             raise ValueError(f"Channel '{channel_name}' size must be positive.")
+        if new_size == 0:
+            self.delete_channel(channel_name)
+            return
+
         self.channel_sizes[channel_name] = new_size
+
+    def delete_channel(self, channel_name: str) -> None:
+        """Delete a channel from the mapping.
+
+        Args:
+            channel_name: The name of the channel to delete.
+
+        Raises:
+            ValueError: If the channel is not found.
+        """
+        if channel_name not in self.channel_sizes:
+            raise ValueError(f"Channel '{channel_name}' not found.")
+        del self.channel_sizes[channel_name]
 
     def add_channel(
         self, channel_name: str, size: int, position: Optional[int] = None

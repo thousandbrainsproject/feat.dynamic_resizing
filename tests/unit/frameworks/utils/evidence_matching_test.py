@@ -68,17 +68,66 @@ class ChannelMapperTest(unittest.TestCase):
         self.assertEqual(self.mapper.channel_range("C"), (18, 33))
         self.assertEqual(self.mapper.total_size, 33)
 
+    def test_resize_channel_to_zero_deletes(self) -> None:
+        """Resizing a channel to zero removes it."""
+        self.mapper.resize_channel_to("B", 0)
+        self.assertEqual(self.mapper.channels, ["A", "C"])
+        self.assertEqual(self.mapper.total_size, 20)
+        self.assertEqual(self.mapper.channel_range("A"), (0, 5))
+        self.assertEqual(self.mapper.channel_range("C"), (5, 20))
+        # "B" is gone
+        with self.assertRaises(ValueError):
+            self.mapper.channel_range("B")
+
     def test_resize_channel_to_invalid_channel(self) -> None:
         """Test resizing a non-existent channel."""
         with self.assertRaises(ValueError):
             self.mapper.resize_channel_to("Z", 5)
 
     def test_resize_channel_to_invalid_size(self) -> None:
-        """Test resizing a channel to a non-positive size."""
-        with self.assertRaises(ValueError):
-            self.mapper.resize_channel_to("B", 0)
+        """Test resizing a channel to a negative size."""
         with self.assertRaises(ValueError):
             self.mapper.resize_channel_to("B", -3)
+
+    def test_delete_channel_middle(self) -> None:
+        """Deleting a middle channel updates order, ranges, and total size."""
+        self.mapper.delete_channel("B")
+        self.assertEqual(self.mapper.channels, ["A", "C"])
+        self.assertEqual(self.mapper.total_size, 20)
+        self.assertEqual(self.mapper.channel_range("A"), (0, 5))
+        self.assertEqual(self.mapper.channel_range("C"), (5, 20))
+
+    def test_delete_channel_first(self) -> None:
+        """Deleting the first channel shifts subsequent ranges correctly."""
+        self.mapper.delete_channel("A")
+        self.assertEqual(self.mapper.channels, ["B", "C"])
+        self.assertEqual(self.mapper.total_size, 25)
+        self.assertEqual(self.mapper.channel_range("B"), (0, 10))
+        self.assertEqual(self.mapper.channel_range("C"), (10, 25))
+
+    def test_delete_channel_last(self) -> None:
+        """Deleting the last channel leaves earlier ranges unchanged."""
+        self.mapper.delete_channel("C")
+        self.assertEqual(self.mapper.channels, ["A", "B"])
+        self.assertEqual(self.mapper.total_size, 15)
+        self.assertEqual(self.mapper.channel_range("A"), (0, 5))
+        self.assertEqual(self.mapper.channel_range("B"), (5, 15))
+
+    def test_delete_channel_nonexistent(self) -> None:
+        """Deleting an unknown channel raises."""
+        with self.assertRaises(ValueError):
+            self.mapper.delete_channel("Z")
+
+    def test_delete_all_channels(self) -> None:
+        """Deleting all channels yields an empty mapper."""
+        self.mapper.delete_channel("A")
+        self.mapper.delete_channel("B")
+        self.mapper.delete_channel("C")
+        self.assertEqual(self.mapper.channels, [])
+        self.assertEqual(self.mapper.total_size, 0)
+        # Follow-up operations should still error cleanly
+        with self.assertRaises(ValueError):
+            self.mapper.channel_range("A")
 
     def test_add_channel(self) -> None:
         """Test adding a new channel."""
