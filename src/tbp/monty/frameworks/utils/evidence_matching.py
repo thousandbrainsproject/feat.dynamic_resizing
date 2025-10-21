@@ -98,25 +98,6 @@ class ChannelMapper:
                 return (start, start + size)
             start += size
 
-    def resize_channel_by(self, channel_name: str, value: int) -> None:
-        """Increases or decreases the channel by a specific amount.
-
-        Args:
-            channel_name: The name of the channel.
-            value: The value used to modify the channel size.
-                Use a negative value to decrease the size.
-
-        Raises:
-            ValueError: If the channel is not found or the requested size is negative.
-        """
-        if channel_name not in self.channel_sizes:
-            raise ValueError(f"Channel '{channel_name}' not found.")
-        if self.channel_sizes[channel_name] + value <= 0:
-            raise ValueError(
-                f"Channel '{channel_name}' size cannot be negative or zero."
-            )
-        self.channel_sizes[channel_name] += value
-
     def resize_channel_to(self, channel_name: str, new_size: int) -> None:
         """Sets the size of the given channel to a specific value.
 

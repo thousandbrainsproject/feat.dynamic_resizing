@@ -45,21 +45,6 @@ class ChannelMapperTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.mapper.channel_size("D")
 
-    def test_resize_channel_by_positive(self) -> None:
-        """Test increasing channel sizes."""
-        self.mapper.resize_channel_by("B", 5)
-        self.assertEqual(self.mapper.channel_range("B"), (5, 20))
-        self.assertEqual(self.mapper.total_size, 35)
-
-    def test_resize_channel_by_negative(self) -> None:
-        """Test decreasing channel sizes."""
-        self.mapper.resize_channel_by("B", -5)
-        self.assertEqual(self.mapper.channel_range("B"), (5, 10))
-        self.assertEqual(self.mapper.total_size, 25)
-
-        with self.assertRaises(ValueError):
-            self.mapper.resize_channel_by("A", -10)
-
     def test_resize_channel_to_valid(self) -> None:
         """Test setting a new size for an existing channel."""
         self.mapper.resize_channel_to("A", 8)
