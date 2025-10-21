@@ -1191,23 +1191,28 @@ class EvidenceGraphLM(GraphLM):
         """
         mlh = {}
         if graph_id is not None:
-            mlh_id = np.argmax(self.evidence[graph_id])
-            mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
+            graph_evidence = self.get_evidence_for_object(graph_id)
+            if len(graph_evidence):
+                mlh_id = np.argmax(graph_evidence)
+                mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
         else:
             highest_evidence_so_far = -np.inf
             for graph_id in self.get_all_known_object_ids():
-                mlh_id = np.argmax(self.evidence[graph_id])
-                evidence = self.evidence[graph_id][mlh_id]
-                if evidence > highest_evidence_so_far:
-                    mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
-                    highest_evidence_so_far = evidence
-            if not mlh:  # No objects in memory
-                mlh = self.current_mlh
-                mlh["graph_id"] = "new_object0"
-            logger.info(
-                f"current most likely hypothesis: {mlh['graph_id']} "
-                f"with evidence {np.round(mlh['evidence'], 2)}"
-            )
+                graph_evidence = self.get_evidence_for_object(graph_id)
+                if len(graph_evidence):
+                    mlh_id = np.argmax(graph_evidence)
+                    evidence = graph_evidence[mlh_id]
+                    if evidence > highest_evidence_so_far:
+                        mlh = self._get_mlh_dict_from_id(graph_id, mlh_id)
+                        highest_evidence_so_far = evidence
+
+        if not mlh:  # No objects in memory
+            mlh = self.current_mlh
+            mlh["graph_id"] = "new_object0"
+        logger.info(
+            f"current most likely hypothesis: {mlh['graph_id']} "
+            f"with evidence {np.round(mlh['evidence'], 2)}"
+        )
         return mlh
 
     def _get_node_distance_weights(self, distances):
