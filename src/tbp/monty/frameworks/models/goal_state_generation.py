@@ -930,7 +930,7 @@ class EvidenceGoalStateGenerator(GraphGoalStateGenerator):
         pose and object ID determination, i.e. determines whether there is a good chance
         of discriminating between conflicting object IDs or poses.
 
-        The schedule is designed to balance descriminating the pose and objects as
+        The schedule is designed to balance discriminating the pose and objects as
         efficiently as possible; TODO M future work can use the schedule conditions as
         primitives and use RL or evolutionary algorithms to optimize the relevant
         parameters.
@@ -977,7 +977,7 @@ class EvidenceGoalStateGenerator(GraphGoalStateGenerator):
         top_mlh = self.parent_lm.get_current_mlh()
 
         # If the MLH evidence is significantly above the second MLH (where "significant"
-        # is determined by x_percent_scale_factor below), then focus on descriminating
+        # is determined by x_percent_scale_factor below), then focus on discriminating
         # its pose on some (random) occasions; always focus on pose if we've convereged
         # to one object
         # TODO M update so that not accessing private methods here; part of 2nd phase
