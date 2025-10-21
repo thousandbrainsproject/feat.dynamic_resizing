@@ -810,12 +810,20 @@ class EvidenceGraphLM(GraphLM):
             self._set_hypotheses_in_hpspace(graph_id=graph_id, new_hypotheses=update)
 
         end_time = time.time()
-        assert not np.isnan(np.max(self.evidence[graph_id])), "evidence contains NaN."
-        logger.debug(
+
+        logger_msg = (
             f"evidence update for {graph_id} took "
             f"{np.round(end_time - start_time, 2)} seconds."
-            f" New max evidence: {np.round(np.max(self.evidence[graph_id]), 3)}"
         )
+        graph_evidence = self.get_evidence_for_object(graph_id)
+        if len(graph_evidence):
+            assert not np.isnan(np.max(self.evidence[graph_id])), (
+                "evidence contains NaN."
+            )
+            logger_msg += (
+                f" New max evidence: {np.round(np.max(self.evidence[graph_id]), 3)}"
+            )
+        logger.debug(logger_msg)
 
     def _set_hypotheses_in_hpspace(
         self,
