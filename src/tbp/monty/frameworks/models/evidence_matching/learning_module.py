@@ -1129,7 +1129,13 @@ class EvidenceGraphLM(GraphLM):
         if len(self.graph_memory) == 0:
             logger.info("no objects in memory yet.")
             return []
+
         graph_ids, graph_evidences = self.get_evidence_for_each_graph()
+
+        if len(graph_ids) == 0:
+            logger.info("All hypothesis spaces are empty. No possible matches.")
+            return []
+
         # median_ge = np.median(graph_evidences)
         mean_ge = np.mean(graph_evidences)
         max_ge = np.max(graph_evidences)
