@@ -651,6 +651,7 @@ class ResamplingHypothesesUpdater:
         if (
             hypotheses_ids is None
             or hypotheses_ids.graph_id not in self.resampling_telemetry
+            or not len(hypotheses_ids.channel_sizes)
         ):
             return hypotheses_ids
 
