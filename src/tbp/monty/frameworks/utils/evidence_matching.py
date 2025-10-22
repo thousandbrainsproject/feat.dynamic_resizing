@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 from typing import OrderedDict as OrderedDictType
 
@@ -278,7 +279,7 @@ class EvidenceSlopeTracker:
         hyp_age: Maps channel names to hypothesis age counters.
     """
 
-    def __init__(self, window_size: int = 3, min_age: int = 5) -> None:
+    def __init__(self, window_size: int = 10, min_age: int = 5) -> None:
         """Initializes the EvidenceSlopeTracker.
 
         Args:
@@ -417,50 +418,188 @@ class EvidenceSlopeTracker:
         if channel in self.evidence_buffer:
             self.remove_hyp(np.arange(self.total_size(channel)), channel)
 
-    def calculate_keep_and_remove_ids(
-        self, num_keep: int, channel: str
-    ) -> tuple[npt.NDArray[np.int_], npt.NDArray[np.int_]]:
-        """Determines which hypotheses to keep and which to remove in a channel.
+    def select_hypotheses(
+        self, slope_threshold: float, min_maintained_hyps: int, channel: str
+    ) -> HypothesesSelection:
+        """Returns a hypotheses selection given a slope threshold.
 
-        Hypotheses with the lowest average slope are selected for removal.
+        A hypothesis is maintained if:
+          - Its slope is >= the threshold, OR
+          - It is not yet removable due to age.
 
         Args:
-            num_keep: Requested number of hypotheses to retain.
+            slope_threshold: Minimum slope value to keep a removable (sufficiently old)
+                hypothesis.
+            min_maintained_hyps: Minimum number of hypotheses to maintain.
             channel: Name of the input channel.
 
+        Note that the parameter `min_maintained_hyps` overrides the `slope_threshold`
+        and the removable mask. These hypotheses will be maintained in spite of their
+        slopes and ages.
+
         Returns:
-            - to_keep: Indices of hypotheses to retain.
-            - to_remove: Indices of hypotheses to remove.
+            A selection of hypotheses to maintain.
 
         Raises:
             ValueError: If the channel does not exist.
-            ValueError: If the requested hypotheses to retain are more than available
-                hypotheses.
         """
         if channel not in self.evidence_buffer:
             raise ValueError(f"Channel '{channel}' does not exist.")
 
-        total_size = self.total_size(channel)
-        if num_keep > total_size:
-            raise ValueError(
-                f"Cannot keep {num_keep} hypotheses; only {total_size} exist."
-            )
-        total_ids = np.arange(total_size)
-        num_remove = total_size - num_keep
-
-        # Retrieve valid slopes and sort them
-        removable_mask = self.removable_indices_mask(channel)
         slopes = self.calculate_slopes(channel)
-        removable_slopes = slopes[removable_mask]
-        removable_ids = total_ids[removable_mask]
-        sorted_indices = np.argsort(removable_slopes)
+        removable_mask = self.removable_indices_mask(channel)
 
-        # Calculate which ids to keep and which to remove
-        to_remove = removable_ids[sorted_indices[:num_remove]]
-        to_remove_mask = np.zeros(total_size, dtype=bool)
-        to_remove_mask[to_remove] = True
-        to_keep = total_ids[~to_remove_mask]
-        return to_keep, to_remove
+        maintain_mask = (slopes >= slope_threshold) | (~removable_mask)
+
+        # Ensure at least `min_maintained_hyps` are maintained.
+        # The needed hypotheses are chosen based on their slopes (i.e. high slopes
+        # first)
+        num_maintained_hyps = int(maintain_mask.sum())
+        num_needed_hyps = max(
+            0,
+            min(min_maintained_hyps, self.total_size(channel)) - num_maintained_hyps,
+        )
+        if num_needed_hyps > 0:
+            cand_idx = np.where(~maintain_mask)[0]
+
+            # Use all available hyps. No sorting here.
+            if cand_idx.size == num_needed_hyps:
+                maintain_mask[cand_idx] = True
+
+            # Use hyps with the highest slopes.
+            else:
+                cand_scores = np.nan_to_num(slopes[cand_idx], nan=-np.inf)
+                topk_ix = np.argpartition(cand_scores, num_needed_hyps)[
+                    -num_needed_hyps:
+                ]
+                maintain_mask[cand_idx[topk_ix]] = True
+
+        return HypothesesSelection(maintain_mask)
+
+
+class HypothesesSelection:
+    """Encapsulates the selection of hypotheses to maintain or remove.
+
+    This class stores a boolean mask indicating which hypotheses should be maintained.
+    From this mask, it can return the indices and masks for both the maintained and
+    removed hypotheses. It also provides convenience constructors for creating a
+    selection from maintain/remove masks or from maintain/remove index lists.
+
+    Attributes:
+        _maintain_mask: Boolean mask of shape (N,) where True indicates a maintain
+            hypothesis and False indicates a remove hypothesis.
+    """
+
+    def __init__(self, maintain_mask: npt.NDArray[np.bool_]) -> None:
+        """Initializes a HypothesesSelection from a maintain mask.
+
+        Args:
+            maintain_mask: Boolean array-like of shape (N,) where True indicates a
+                maintained hypothesis and False indicates a removed hypothesis.
+        """
+        self._maintain_mask = np.asarray(maintain_mask, dtype=bool)
+
+    @classmethod
+    def from_maintain_mask(cls, mask: npt.NDArray[np.bool_]) -> HypothesesSelection:
+        """Creates a selection from a maintain mask.
+
+        Args:
+            mask: Boolean array-like where True indicates a maintained hypothesis.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Note:
+            This method is added from completeness, but it is redundant as it calls the
+            default class `__init__` function.
+        """
+        return cls(mask)
+
+    @classmethod
+    def from_remove_mask(cls, mask: npt.NDArray[np.bool_]) -> HypothesesSelection:
+        """Creates a hypotheses selection from a remove mask.
+
+        Args:
+            mask: Boolean array-like where True indicates a hypothesis to remove.
+
+        Returns:
+            A HypothesesSelection instance.
+        """
+        return cls(~mask)
+
+    @classmethod
+    def from_maintain_ids(
+        cls, total_size: int, ids: npt.NDArray[np.int_]
+    ) -> HypothesesSelection:
+        """Creates a hypotheses selection from maintain indices.
+
+        Args:
+            total_size: Total number of hypotheses.
+            ids: Indices of hypotheses to maintain.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Raises:
+            IndexError: If any index is out of range [0, total_size).
+        """
+        mask = np.zeros(int(total_size), dtype=bool)
+
+        if ids.size:
+            if ids.min() < 0 or ids.max() >= total_size:
+                raise IndexError(f"maintain_ids outside [0, {total_size})")
+            mask[np.unique(ids)] = True
+
+        return cls(mask)
+
+    @classmethod
+    def from_remove_ids(
+        cls, total_size: int, ids: npt.NDArray[np.int_]
+    ) -> HypothesesSelection:
+        """Creates a selection from remove indices.
+
+        Args:
+            total_size: Total number of hypotheses.
+            ids: Indices of hypotheses to remove.
+
+        Returns:
+            A HypothesesSelection instance.
+
+        Raises:
+            IndexError: If any index is out of range [0, total_size).
+        """
+        mask = np.ones(int(total_size), dtype=bool)
+
+        if ids.size:
+            if ids.min() < 0 or ids.max() >= total_size:
+                raise IndexError(f"remove_ids outside [0, {total_size})")
+            mask[np.unique(ids)] = False
+
+        return cls(mask)
+
+    @property
+    def maintain_mask(self) -> npt.NDArray[np.bool_]:
+        """Returns the maintain mask."""
+        return self._maintain_mask
+
+    @property
+    def remove_mask(self) -> npt.NDArray[np.bool_]:
+        """Returns the remove mask."""
+        return ~self._maintain_mask
+
+    @property
+    def maintain_ids(self) -> npt.NDArray[np.int_]:
+        """Returns the indices of maintained hypotheses."""
+        return np.flatnonzero(self._maintain_mask).astype(int)
+
+    @property
+    def remove_ids(self) -> npt.NDArray[np.int_]:
+        """Returns the indices of removed hypotheses."""
+        return np.flatnonzero(~self._maintain_mask).astype(int)
+
+    def __len__(self) -> int:
+        """Returns the total number of hypotheses in the selection."""
+        return int(self._maintain_mask.size)
 
 
 def evidence_update_threshold(
@@ -526,6 +665,20 @@ def evidence_update_threshold(
             "[int, float, '[int]%', 'mean', "
             "'median', 'all', 'x_percent_threshold']"
         )
+
+
+@dataclass
+class ConsistentHypothesesIds:
+    """Contains hypotheses ids for symmetry detection.
+
+    These ids will be updated when using the `ResamplingHypothesesUpdater`.
+    The update makes sure the ids are consistent across matching steps despite
+    resizing of hypothesis spaces.
+    """
+
+    hypotheses_ids: npt.NDArray[np.int_]
+    channel_sizes: OrderedDictType[str, int]
+    graph_id: str
 
 
 class InvalidEvidenceThresholdConfig(ValueError):
