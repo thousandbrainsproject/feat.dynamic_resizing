@@ -961,7 +961,7 @@ class EvidenceGoalStateGenerator(GraphGoalStateGenerator):
         if top_id is None and second_id is None:
             return False
 
-        if top_id == second_id:
+        if second_id is None:
             # If we only have one object with a single hypothesis, we should not
             # attempt to generate a goal state.
             if len(self.parent_lm.get_evidence_for_object(top_id)) == 1:

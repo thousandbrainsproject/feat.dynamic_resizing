@@ -617,10 +617,10 @@ class EvidenceGraphLM(GraphLM):
         if len(graph_ids) == 0:
             return None, None
 
-        # If we have a single hypothesis space, return the same object id for both
-        # top two mlh ids. The gsg will focus on pose to generate a goal state.
+        # If we have a single hypothesis space, return the second object id as None.
+        # The gsg will focus on pose to generate a goal state.
         if len(graph_ids) == 1:
-            return graph_ids[0], graph_ids[0]
+            return graph_ids[0], None
 
         # Note the indices below will be ordered with the 2nd MLH appearing first, and
         # the 1st MLH appearing second.
