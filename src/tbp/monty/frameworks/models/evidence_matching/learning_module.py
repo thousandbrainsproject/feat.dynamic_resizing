@@ -687,14 +687,14 @@ class EvidenceGraphLM(GraphLM):
         if graph_ids[0] not in self.evidence.keys():
             return ["patch_off_object"], [0]
 
-        valid_graph_ids = []
-        valid_graph_evidences = []
+        available_graph_ids = []
+        available_graph_evidences = []
         for graph_id in graph_ids:
             if len(self.hyp_evidences_for_object(graph_id)):
-                valid_graph_ids.append(graph_id)
-                valid_graph_evidences.append(np.max(self.evidence[graph_id]))
+                available_graph_ids.append(graph_id)
+                available_graph_evidences.append(np.max(self.evidence[graph_id]))
 
-        return valid_graph_ids, np.array(valid_graph_evidences)
+        return available_graph_ids, np.array(available_graph_evidences)
 
     def get_all_evidences(self):
         """Return evidence for each pose on each graph (pointer)."""
