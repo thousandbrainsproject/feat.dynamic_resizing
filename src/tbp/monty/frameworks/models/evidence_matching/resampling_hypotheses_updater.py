@@ -70,6 +70,7 @@ class ChannelHypothesesResamplingTelemetry:
     ages: npt.NDArray[np.int_]
     evidence_slopes: npt.NDArray[np.float64]
     removed_ids: npt.NDArray[np.int_]
+    avg_slopes: float
 
 
 class ResamplingHypothesesUpdater:
@@ -104,7 +105,8 @@ class ResamplingHypothesesUpdater:
             DefaultFeaturesForMatchingSelector
         ),
         resampling_multiplier: float = 0.1,
-        evidence_slope_threshold: float = 0.3,
+        evidence_slope_threshold: float = 0.0,
+        sampling_burst_duration: int = 5,
         include_telemetry: bool = False,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",
@@ -185,6 +187,7 @@ class ResamplingHypothesesUpdater:
         self.features_for_matching_selector = features_for_matching_selector
         self.resampling_multiplier = resampling_multiplier
         self.evidence_slope_threshold = evidence_slope_threshold
+        self.sampling_burst_duration = sampling_burst_duration
         self.graph_memory = graph_memory
         self.include_telemetry = include_telemetry
         self.initial_possible_poses = get_initial_possible_poses(initial_possible_poses)
@@ -217,6 +220,8 @@ class ResamplingHypothesesUpdater:
 
         # Dictionary of resampling telemetry for each channel in each graph_id
         self.resampling_telemetry: dict[str, dict[str, HypothesesUpdateTelemetry]] = {}
+
+        self.sampling_burst_steps = self.sampling_burst_duration
 
     def update_hypotheses(
         self,
@@ -340,6 +345,7 @@ class ResamplingHypothesesUpdater:
                     ages=tracker.hyp_ages(input_channel),
                     evidence_slopes=tracker.calculate_slopes(input_channel),
                     removed_ids=hypotheses_selection.remove_ids,
+                    avg_slopes=self.avg_slope,
                 )
             )
 
@@ -410,8 +416,11 @@ class ResamplingHypothesesUpdater:
         # Should we remove this now that we are resampling? We can sample the
         # same number of hypotheses during initialization as in every other step.
         if init_hyp_space:
-            full_informed_count = graph_num_points * num_hyps_per_node
-            return HypothesesSelection(maintain_mask=[]), full_informed_count
+            # init_informed_count = graph_num_points * num_hyps_per_node
+            resampling_multiplier = min(self.resampling_multiplier, num_hyps_per_node)
+            init_informed_count = round(graph_num_points * resampling_multiplier)
+            init_informed_count -= init_informed_count % num_hyps_per_node
+            return HypothesesSelection(maintain_mask=[]), init_informed_count
 
         # This makes sure that we do not request more than the available number of
         # informed hypotheses
@@ -420,6 +429,9 @@ class ResamplingHypothesesUpdater:
         # Calculate the total number of informed hypotheses to be resampled
         new_informed = round(graph_num_points * resampling_multiplier)
         new_informed -= new_informed % num_hyps_per_node
+
+        if self.sampling_burst_steps == 0:
+            new_informed = 0
 
         # Returns a selection of hypotheses to maintain/delete
         hypotheses_selection = tracker.select_hypotheses(
@@ -706,3 +718,72 @@ class ResamplingHypothesesUpdater:
 
         new_ids = np.concatenate(out) if out else np.empty(0, dtype=np.int64)
         return replace(hypotheses_ids, hypotheses_ids=new_ids)
+
+    def average_slope_of_topk_by_latest_value(self, k: int) -> None:
+        """Return the mean slope of the hypotheses that are top-k by latest evidence.
+
+        Selection is based only on the last column in each channel's evidence_buffer.
+        After selecting those hypotheses, compute their slopes via calculate_slopes(...)
+        and average those slopes.
+
+        If fewer than k valid latest-evidence entries exist, use all valid ones.
+        Slopes that are NaN are skipped in the final average; if none are finite,
+        returns NaN.
+        """
+        if k <= 0:
+            self.avg_slope = float("nan")
+            return None
+
+        last_vals_list = []
+        slopes_list = []
+
+        for tr in self.evidence_slope_trackers.values():
+            for ch in tr.evidence_buffer.keys():
+                buf = tr.evidence_buffer[ch]  # shape: [num_hyp, window_size]
+                if buf.size == 0:
+                    continue
+
+                # Latest evidence values
+                last_vals = buf[:, -1]  # shape: [num_hyp]
+                # Exclude NaN latest values from selection
+                valid_latest = np.isfinite(last_vals)
+                if not valid_latest.any():
+                    continue
+
+                # Slopes for all hyps in this channel
+                ch_slopes = tr.calculate_slopes(ch)  # shape: [num_hyp]
+
+                # Keep only candidates with finite latest evidence
+                last_vals_list.append(last_vals[valid_latest])
+                slopes_list.append(ch_slopes[valid_latest])
+
+        if not last_vals_list:
+            self.avg_slope = float("nan")
+            return None
+
+        all_last = np.concatenate(last_vals_list)  # latest evidence values
+        all_slopes = np.concatenate(slopes_list)  # matching slopes
+
+        n = all_last.size
+        if n == 0:
+            self.avg_slope = float("nan")
+            return None
+
+        k_eff = min(k, n)
+        # Get indices of the top-k by latest evidence
+        topk_idx = np.argpartition(all_last, -k_eff)[-k_eff:]
+
+        # Average only finite slopes among the selected set
+        topk_slopes = all_slopes[topk_idx]
+        finite_mask = np.isfinite(topk_slopes)
+        if not finite_mask.any():
+            self.avg_slope = float("nan")
+            return None
+
+        self.avg_slope = float(np.mean(topk_slopes[finite_mask]))
+
+        if self.sampling_burst_steps > 0:
+            self.sampling_burst_steps -= 1
+
+        if self.avg_slope <= 1.2 and self.sampling_burst_steps == 0:
+            self.sampling_burst_steps = self.sampling_burst_duration

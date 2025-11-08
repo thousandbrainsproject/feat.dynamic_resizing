@@ -721,6 +721,9 @@ class EvidenceGraphLM(GraphLM):
 
     def _update_possible_matches(self, query):
         """Update evidence for each hypothesis instead of removing them."""
+        # Get average slope of top-k hypotheses
+        self.hypotheses_updater.average_slope_of_topk_by_latest_value(k=3)
+
         thread_list = []
         for graph_id in self.get_all_known_object_ids():
             if self.use_multithreading:
