@@ -124,7 +124,7 @@ class ResamplingHypothesesUpdater:
         features_for_matching_selector: type[FeaturesForMatchingSelector] = (
             DefaultFeaturesForMatchingSelector
         ),
-        resampling_multiplier: float = 0.2,
+        resampling_multiplier: float = 0.4,
         evidence_slope_threshold: float = 0.5,
         sampling_burst_duration: int = 5,
         slope_burst_trigger: float = 1.0,
