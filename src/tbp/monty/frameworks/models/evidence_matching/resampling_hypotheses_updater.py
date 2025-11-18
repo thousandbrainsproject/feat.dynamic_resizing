@@ -789,12 +789,12 @@ class ResamplingHypothesesUpdater:
         """
         max_slope = float("-inf")
 
-        for tr in self.evidence_slope_trackers.values():
-            for ch in tr.evidence_buffer.keys():
-                if tr.total_size(ch) == 0:
+        for tracker in self.evidence_slope_trackers.values():
+            for channel in tracker.evidence_buffer.keys():
+                if tracker.total_size(channel) == 0:
                     continue
 
-                slopes = tr.calculate_slopes(ch)
+                slopes = tracker.calculate_slopes(channel)
                 if slopes.size == 0:
                     continue
 
