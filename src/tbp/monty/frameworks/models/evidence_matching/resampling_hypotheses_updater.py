@@ -77,24 +77,27 @@ class ChannelHypothesesResamplingTelemetry(ChannelHypothesesUpdateTelemetry):
 
 
 class ResamplingHypothesesUpdater:
-    """Hypotheses updater that resamples hypotheses based on prediction error.
+    """Hypotheses updater that adds and deletes hypotheses based on evidence slope.
 
     This updater enables updating of the hypothesis space by intelligently resampling
     and rebuilding the hypothesis space when the model's prediction error is high. The
     prediction error is determined based on the highest evidence slope over all the
     objects hypothesis spaces. If the hypothesis with the highest slope is unable to
-    accumulate evidence at a high enough slope, a sampling burst is triggered. A
-    sampling burst adds new hypotheses over a specified `sampling_burst_duration`
-    number of consecutive steps to all hypothesis spaces. This burst duration smoothes
-    the effect of sensor noise. Hypotheses are deleted when their smoothed evidence
-    slope is below `evidence_slope_threshold`.
+    accumulate evidence at a high enough slope, i.e., none of the current hypotheses
+    match the incoming observations well, a sampling burst is triggered. A sampling
+    burst adds new hypotheses over a specified `sampling_burst_duration` number of
+    consecutive steps to all hypothesis spaces. This burst duration reduces the effect
+    of sensor noise. Hypotheses are deleted when their smoothed evidence slope is below
+    `evidence_slope_threshold`.
 
     The resampling process is governed by four main parameters:
       - `resampling_multiplier`: Determines the number of the hypotheses to resample
         as a multiplier of the object graph nodes.
       - `evidence_slope_threshold`: Hypotheses below this threshold are deleted.
       - `sampling_burst_duration`: The number of consecutive steps in each burst.
-      - `slope_burst_trigger`: The threshold for triggering a sampling burst.
+      - `slope_burst_trigger`: The threshold for triggering a sampling burst. This
+        threshold is applied to the highest global slope over all the hypotheses (i.e.,
+        over all objects' hypothesis spaces). The range of this slope is [-1, 2].
 
     To reproduce the behavior of `DefaultHypothesesUpdater` sampling a fixed number of
     hypotheses only at the beginning of the episode, you can set:
@@ -164,7 +167,7 @@ class ResamplingHypothesesUpdater:
             resampling_multiplier: Determines the number of the hypotheses to resample
                 as a multiplier of the object graph nodes. Value of 0.0 results in no
                 resampling. Value can be greater than 1 but not to exceed the
-                `num_hyps_per_node` of the current step. Defaults to 0.2.
+                `num_hyps_per_node` of the current step. Defaults to 0.4.
             evidence_slope_threshold: Hypotheses below this threshold are deleted.
                 Expected range matches the range of step evidence change, i.e.,
                 [-1.0, 2.0]. Defaults to 0.5.
