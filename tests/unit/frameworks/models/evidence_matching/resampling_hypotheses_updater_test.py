@@ -146,12 +146,12 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         self,
         rlm,
         resampling_multiplier,
-        evidence_slope_threshold,
+        deletion_trigger_slope,
         pose_defined,
         graph_id,
     ):
         rlm.hypotheses_updater.resampling_multiplier = resampling_multiplier
-        rlm.hypotheses_updater.evidence_slope_threshold = evidence_slope_threshold
+        rlm.hypotheses_updater.deletion_trigger_slope = deletion_trigger_slope
         test_features = {"patch": {"pose_fully_defined": pose_defined}}
         return rlm.hypotheses_updater._sample_count(
             input_channel="patch",
@@ -182,7 +182,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             _, informed_count = self.run_sample_count(
                 rlm=rlm,
                 resampling_multiplier=resampling_multiplier,
-                evidence_slope_threshold=0.0,
+                deletion_trigger_slope=0.0,
                 pose_defined=pose_defined,
                 graph_id=graph_id,
             )
@@ -217,7 +217,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         _, informed_count = self.run_sample_count(
             rlm=rlm,
             resampling_multiplier=resampling_multiplier,
-            evidence_slope_threshold=0.0,
+            deletion_trigger_slope=0.0,
             pose_defined=pose_defined,
             graph_id=graph_id,
         )

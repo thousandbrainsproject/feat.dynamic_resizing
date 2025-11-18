@@ -88,23 +88,23 @@ class ResamplingHypothesesUpdater:
     burst adds new hypotheses over a specified `sampling_burst_duration` number of
     consecutive steps to all hypothesis spaces. This burst duration reduces the effect
     of sensor noise. Hypotheses are deleted when their smoothed evidence slope is below
-    `evidence_slope_threshold`.
+    `deletion_trigger_slope`.
 
     The resampling process is governed by four main parameters:
       - `resampling_multiplier`: Determines the number of the hypotheses to resample
         as a multiplier of the object graph nodes.
-      - `evidence_slope_threshold`: Hypotheses below this threshold are deleted.
+      - `deletion_trigger_slope`: Hypotheses below this threshold are deleted.
       - `sampling_burst_duration`: The number of consecutive steps in each burst.
-      - `slope_burst_trigger`: The threshold for triggering a sampling burst. This
+      - `burst_trigger_slope`: The threshold for triggering a sampling burst. This
         threshold is applied to the highest global slope over all the hypotheses (i.e.,
         over all objects' hypothesis spaces). The range of this slope is [-1, 2].
 
     To reproduce the behavior of `DefaultHypothesesUpdater` sampling a fixed number of
     hypotheses only at the beginning of the episode, you can set:
         - `resampling_multiplier=2` (or `umbilical_num_poses` if PC undefined)
-        - `evidence_slope_threshold=-1.0` (no deletion is allowed)
+        - `deletion_trigger_slope=-1.0` (no deletion is allowed)
         - `sampling_burst_duration=1` (sample the full burst over a single step)
-        - `slope_burst_trigger=-1.0` (never trigger additional bursts)
+        - `burst_trigger_slope=-1.0` (never trigger additional bursts)
 
     These parameters will trigger a single-step burst at the first step of the episode.
     Note that if the PC of the first observation is undetermined,
@@ -128,9 +128,9 @@ class ResamplingHypothesesUpdater:
             DefaultFeaturesForMatchingSelector
         ),
         resampling_multiplier: float = 0.4,
-        evidence_slope_threshold: float = 0.5,
+        deletion_trigger_slope: float = 0.5,
         sampling_burst_duration: int = 5,
-        slope_burst_trigger: float = 1.0,
+        burst_trigger_slope: float = 1.0,
         include_telemetry: bool = False,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",
@@ -168,12 +168,12 @@ class ResamplingHypothesesUpdater:
                 as a multiplier of the object graph nodes. Value of 0.0 results in no
                 resampling. Value can be greater than 1 but not to exceed the
                 `num_hyps_per_node` of the current step. Defaults to 0.4.
-            evidence_slope_threshold: Hypotheses below this threshold are deleted.
+            deletion_trigger_slope: Hypotheses below this threshold are deleted.
                 Expected range matches the range of step evidence change, i.e.,
                 [-1.0, 2.0]. Defaults to 0.5.
             sampling_burst_duration: The number of steps in every sampling burst.
                 Defaults to 5.
-            slope_burst_trigger: A threshold below which a sampling burst is triggered.
+            burst_trigger_slope: A threshold below which a sampling burst is triggered.
                 Defaults to 1.0.
             include_telemetry: Flag to control if we want to calculate and return the
                 resampling telemetry in the `update_hypotheses` method. Defaults to
@@ -215,9 +215,9 @@ class ResamplingHypothesesUpdater:
         self.feature_weights = feature_weights
         self.features_for_matching_selector = features_for_matching_selector
         self.resampling_multiplier = resampling_multiplier
-        self.evidence_slope_threshold = evidence_slope_threshold
+        self.deletion_trigger_slope = deletion_trigger_slope
         self.sampling_burst_duration = sampling_burst_duration
-        self.slope_burst_trigger = slope_burst_trigger
+        self.burst_trigger_slope = burst_trigger_slope
         self.graph_memory = graph_memory
         self.include_telemetry = include_telemetry
         self.initial_possible_poses = get_initial_possible_poses(initial_possible_poses)
@@ -263,7 +263,7 @@ class ResamplingHypothesesUpdater:
         self.max_slope = self._max_global_slope()
 
         if (
-            self.max_slope <= self.slope_burst_trigger
+            self.max_slope <= self.burst_trigger_slope
             and self.sampling_burst_steps == 0
         ):
             self.sampling_burst_steps = self.sampling_burst_duration
@@ -472,7 +472,7 @@ class ResamplingHypothesesUpdater:
             This function takes into account the following parameters:
               - `resampling_multiplier`: The number of hypotheses to resample. This
                 is defined as a multiplier of the number of nodes in the object graph.
-              - `evidence_slope_threshold`: This dictates how many hypotheses to
+              - `deletion_trigger_slope`: This dictates how many hypotheses to
                 delete. Hypotheses below this threshold are deleted.
               - `sampling_burst_steps`: The remaining number of burst steps. This value
                 is decremented in the `post_step` function.
@@ -497,7 +497,7 @@ class ResamplingHypothesesUpdater:
         # Returns a selection of hypotheses to maintain/delete
         hypotheses_selection = (
             tracker.select_hypotheses(
-                slope_threshold=self.evidence_slope_threshold, channel=input_channel
+                slope_threshold=self.deletion_trigger_slope, channel=input_channel
             )
             if input_channel in mapper.channels
             else HypothesesSelection(maintain_mask=[])
