@@ -6,6 +6,8 @@
 # Use of this source code is governed by the MIT
 # license that can be found in the LICENSE file or at
 # https://opensource.org/licenses/MIT.
+from collections import OrderedDict
+
 import pytest
 
 pytest.importorskip(
@@ -44,12 +46,21 @@ from tbp.monty.frameworks.models.evidence_matching.resampling_hypotheses_updater
 )
 from tbp.monty.frameworks.utils.evidence_matching import (
     ChannelMapper,
+    ConsistentHypothesesIds,
     EvidenceSlopeTracker,
 )
 from tbp.monty.simulators.habitat.configs import (
     EnvInitArgsPatchViewMount,
     PatchViewFinderMountHabitatEnvInterfaceConfig,
 )
+
+
+def make_consistent_ids(graph_id, sizes, ids):
+    return ConsistentHypothesesIds(
+        graph_id=graph_id,
+        channel_sizes=OrderedDict(sizes),
+        hypotheses_ids=np.asarray(ids, dtype=np.int64),
+    )
 
 
 class ResamplingHypothesesUpdaterTest(TestCase):
@@ -104,6 +115,13 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             ),
         )
 
+    def get_resampling_updater(self):
+        train_config = copy.deepcopy(self.pretraining_configs)
+        with MontySupervisedObjectPretrainingExperiment(train_config) as train_exp:
+            train_exp.setup_experiment(train_exp.config)
+
+        return train_exp.model.learning_modules[0].hypotheses_updater
+
     def get_pretrained_resampling_lm(self):
         train_config = copy.deepcopy(self.pretraining_configs)
         with MontySupervisedObjectPretrainingExperiment(train_config) as train_exp:
@@ -127,13 +145,14 @@ class ResamplingHypothesesUpdaterTest(TestCase):
     def run_sample_count(
         self,
         rlm,
-        count_multiplier,
-        existing_to_new_ratio,
+        resampling_multiplier,
+        evidence_slope_threshold,
         pose_defined,
         graph_id,
+        init_hyp_space,
     ):
-        rlm.hypotheses_updater.hypotheses_count_multiplier = count_multiplier
-        rlm.hypotheses_updater.hypotheses_existing_to_new_ratio = existing_to_new_ratio
+        rlm.hypotheses_updater.resampling_multiplier = resampling_multiplier
+        rlm.hypotheses_updater.evidence_slope_threshold = evidence_slope_threshold
         test_features = {"patch": {"pose_fully_defined": pose_defined}}
         return rlm.hypotheses_updater._sample_count(
             input_channel="patch",
@@ -141,6 +160,7 @@ class ResamplingHypothesesUpdaterTest(TestCase):
             graph_id=graph_id,
             mapper=rlm.channel_hypothesis_mapping[graph_id],
             tracker=rlm.hypotheses_updater.evidence_slope_trackers[graph_id],
+            init_hyp_space=init_hyp_space,
         )
 
     def _initial_count(self, rlm, pose_defined):
@@ -151,26 +171,27 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         sampling with defined and undefined poses.
         """
         graph_id = "capsule3DSolid"
-        existing_count, informed_count = self.run_sample_count(
+        hypotheses_selection, informed_count = self.run_sample_count(
             rlm=rlm,
-            count_multiplier=1,
-            existing_to_new_ratio=0.1,
+            resampling_multiplier=0.1,
+            evidence_slope_threshold=0.0,
             pose_defined=pose_defined,
             graph_id=graph_id,
+            init_hyp_space=True,
         )
-        self.assertEqual(existing_count, 0)
+        self.assertEqual(len(hypotheses_selection.maintain_ids), 0)
         self.assertEqual(
             informed_count,
             self._graph_node_count(rlm, graph_id)
             * self._num_hyps_multiplier(rlm, pose_defined),
         )
 
-    def _count_multiplier(self, rlm):
-        """This tests that the count multiplier correctly scales the hypothesis space.
+    def _resampling_multiplier(self, rlm):
+        """Tests that the resampling multiplier correctly scales the hypothesis space.
 
-        The count multiplier parameter is used to scale the hypothesis space between
-        steps. For example, a multiplier of 2, will request to double the number of
-        hypotheses.
+        The resampling multiplier parameter is used to scale the hypothesis space
+        between steps. For example, a multiplier of 2, will request to increase the
+        number of hypotheses by 2x the number of graph nodes.
         """
         graph_id = "capsule3DSolid"
         pose_defined = True
@@ -180,124 +201,54 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         rlm.hypotheses_updater.evidence_slope_trackers[graph_id].add_hyp(
             before_count, "patch"
         )
-        count_multipliers = [0.5, 1, 2]
+        resampling_multipliers = [0.5, 1, 2]
 
-        for count_multiplier in count_multipliers:
-            existing_count, informed_count = self.run_sample_count(
+        for resampling_multiplier in resampling_multipliers:
+            _, informed_count = self.run_sample_count(
                 rlm=rlm,
-                count_multiplier=count_multiplier,
-                existing_to_new_ratio=0.5,
+                resampling_multiplier=resampling_multiplier,
+                evidence_slope_threshold=0.0,
                 pose_defined=pose_defined,
                 graph_id=graph_id,
+                init_hyp_space=False,
             )
-            self.assertEqual(
-                before_count * count_multiplier, (existing_count + informed_count)
-            )
+            self.assertEqual(graph_num_nodes * resampling_multiplier, informed_count)
 
         # Reset mapper
         rlm.channel_hypothesis_mapping[graph_id] = ChannelMapper()
 
-    def _count_multiplier_maximum(self, rlm, pose_defined):
-        """This tests that the count multiplier respects the maximum scaling boundary.
+    def _resampling_multiplier_maximum(self, rlm, pose_defined):
+        """Tests that the resampling multiplier respects the maximum scaling boundary.
 
-        The count multiplier parameter is used to scale the hypothesis space between
-        steps. For example, a multiplier of 2, will request to double the number of
-        hypotheses. However, there is a limit to how many hypotheses we can resample.
-        For existing hypotheses, the limit is to resample all of them. For newly
-        resampled informed hypotheses, the limit depends on whether the pose is defined
-        or not. This test ensures that `_sample_count` respects the maximum sampling
-        limit.
+        The resampling multiplier is used to scale the hypothesis space between
+        steps. For example, a multiplier of 2, will request to add hypotheses of
+        count that is twice the number of nodes in the object graph. However, there
+        is a limit to how many hypotheses we can resample. For existing hypotheses,
+        the limit is to resample all of them. For newly resampled informed hypotheses,
+        the limit depends on whether the pose is defined or not. This test ensures
+        that `_sample_count` respects the maximum sampling limit.
 
-        In the case of `pose_defined = True`
-        Existing is 72 and informed is 2*36=72 (total is 144)
-        Maximum multiplier can be 2 if the pose is defined
-
-        In the case of `pose_defined = False`
-        Existing is 72 and informed is 8*36=288 (total is 360)
-        Maximum multiplier can be umbilical_num_poses if the pose is undefined
+        Maximum multiplier cannot exceed the num_hyps_per_node (2 if
+        `pose_defined=True` or umbilical_num_poses if `pose_defined=False`).
         """
         graph_id = "capsule3DSolid"
         graph_num_nodes = self._graph_node_count(rlm, graph_id)
         before_count = graph_num_nodes * self._num_hyps_multiplier(rlm, pose_defined)
         rlm.channel_hypothesis_mapping[graph_id].add_channel("patch", before_count)
 
-        requested_count_multiplier = 100
+        resampling_multiplier = 100
         expected_count = before_count + (
             graph_num_nodes * self._num_hyps_multiplier(rlm, pose_defined)
         )
-        existing_count, informed_count = self.run_sample_count(
+        _, informed_count = self.run_sample_count(
             rlm=rlm,
-            count_multiplier=requested_count_multiplier,
-            existing_to_new_ratio=0.5,
+            resampling_multiplier=resampling_multiplier,
+            evidence_slope_threshold=0.0,
             pose_defined=pose_defined,
             graph_id=graph_id,
+            init_hyp_space=False,
         )
-        self.assertEqual(expected_count, existing_count + informed_count)
-
-        # Reset mapper
-        rlm.channel_hypothesis_mapping[graph_id] = ChannelMapper()
-
-    def _count_ratio(self, rlm, pose_defined):
-        """This tests that the resampling ratio of new hypotheses is correct.
-
-        The existing_to_new_ratio parameter is used to control the ratio of how many
-        existing vs. informed hypotheses to resample. This test ensures that the
-        `_sample_count` function follows the expected behavior of this ratio parameter.
-
-        Note that the `_sample_count` function will prioritize the multiplier count
-        parameter over this ratio parameter. In other words, if not enough existing
-        hypotheses are available, the function will attempt to fill the missing
-        existing hypotheses with informed hypotheses.
-
-        """
-        graph_id = "capsule3DSolid"
-        graph_num_nodes = self._graph_node_count(rlm, graph_id)
-        available_existing_count = graph_num_nodes * self._num_hyps_multiplier(
-            rlm, pose_defined
-        )
-        rlm.channel_hypothesis_mapping[graph_id].add_channel(
-            "patch", available_existing_count
-        )
-        rlm.hypotheses_updater.evidence_slope_trackers[graph_id].add_hyp(
-            available_existing_count, "patch"
-        )
-        count_multiplier = 2
-
-        for ratio in [0.0, 0.1, 0.5, 0.9, 1.0]:
-            requested_existing_count = (
-                available_existing_count * count_multiplier * (1.0 - ratio)
-            )
-            requested_informed_count = (
-                available_existing_count * count_multiplier * ratio
-            )
-            maximum_available_existing_count = available_existing_count
-            maximum_available_informed_count = (
-                graph_num_nodes * self._num_hyps_multiplier(rlm, pose_defined)
-            )
-
-            existing_count, informed_count = self.run_sample_count(
-                rlm=rlm,
-                count_multiplier=count_multiplier,
-                existing_to_new_ratio=ratio,
-                pose_defined=pose_defined,
-                graph_id=graph_id,
-            )
-            expected_existing_count = min(
-                maximum_available_existing_count,
-                requested_existing_count,
-            )
-            self.assertEqual(existing_count, int(expected_existing_count))
-
-            # `missing_existing_hypotheses` will be zero, or otherwise the count that
-            # informed hypotheses need to fill in
-            missing_existing_hypotheses = (
-                requested_existing_count - expected_existing_count
-            )
-            expected_informed_count = min(
-                maximum_available_informed_count,
-                (requested_informed_count + missing_existing_hypotheses),
-            )
-            self.assertEqual(informed_count, int(expected_informed_count))
+        self.assertEqual(expected_count, before_count + informed_count)
 
         # Reset mapper
         rlm.channel_hypothesis_mapping[graph_id] = ChannelMapper()
@@ -307,8 +258,8 @@ class ResamplingHypothesesUpdaterTest(TestCase):
 
         We define three different tests of `_sample_count`:
             - Testing the requested count for initialization of hypotheses space
-            - Testing the count multiplier parameter
-            - Testing the count ratio of resampled hypotheses
+            - Testing the resampling multiplier parameter
+            - Testing the resampling multiplier parameter maximum limit
         """
         rlm = self.get_pretrained_resampling_lm()
 
@@ -317,10 +268,148 @@ class ResamplingHypothesesUpdaterTest(TestCase):
         self._initial_count(rlm, pose_defined=False)
 
         # test count multiplier
-        self._count_multiplier(rlm)
-        self._count_multiplier_maximum(rlm, pose_defined=True)
-        self._count_multiplier_maximum(rlm, pose_defined=False)
+        self._resampling_multiplier(rlm)
+        self._resampling_multiplier_maximum(rlm, pose_defined=True)
+        self._resampling_multiplier_maximum(rlm, pose_defined=False)
 
-        # test existing to informed ratio
-        self._count_ratio(rlm, pose_defined=True)
-        self._count_ratio(rlm, pose_defined=False)
+    def _single_channel_no_changes(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {"patch": {"removed_ids": [], "added_ids": []}}
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 5)], ids=[0, 1, 3, 4]
+        )
+
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 3, 4]))
+
+    def _single_channel_with_removals_shifts(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {"patch": {"removed_ids": [1, 4, 6], "added_ids": []}}
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 8)], ids=[0, 2, 3, 5, 7]
+        )
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # Shift per searchsorted([1,4,6], x, 'left'): 0->0, 2->1, 3->1, 5->2, 7->3
+        # new locals after shifting:  [0,1,2,3,4]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
+
+    def _single_channel_full_remap_misses_added(self, updater):
+        """Tests that added ids do not show up in remapping.
+
+        The remapping function finds the mapping between ids from the previous step
+        to the current time step. The added_ids did not exist in previous steps,
+        therefore should not appear in the mapping.
+        """
+        added_ids = [5, 6]
+
+        updater.resampling_telemetry = {
+            "mug": {"patch": {"removed_ids": [], "added_ids": added_ids}}
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch", 5)], ids=list(range(5))
+        )
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # In patch0: locals ids = [0,1,2,3,4]; removed = []; shift = [0,0,0,0,0].
+        # So [0,1,2,3,4] becomes [0,1,2,3,4]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 4]))
+
+        # Added ids should NOT appear in the remapped ids
+        self.assertFalse(np.isin(added_ids, hyp_ids.hypotheses_ids).any())
+
+    def _multi_channel_rebase_due_to_resizing(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [1, 3], "added_ids": [5, 6]},
+                "patch1": {"removed_ids": [2], "added_ids": [4]},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch0", 5), ("patch1", 4)], ids=[0, 2, 4, 5, 7]
+        )
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # In patch0: locals ids = [0,2,4]; removed = [1,3]; shift = [0,1,2].
+        # So [0, 2, 4] becomes [0, 1, 2]
+
+        # new bases are the same since patch0 removed 2 and added 2.
+        # So new_bases = [0,5]
+
+        # In patch1: locals ids = [0,2]; removed = [2]; new base = 5
+        # So [5, 7] becomes [5]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 5]))
+
+    def _rebase_when_first_channel_shrinks(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [1, 3], "added_ids": []},  # shrink by 2
+                "patch1": {"removed_ids": [], "added_ids": []},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug",
+            sizes=[("patch0", 5), ("patch1", 4)],
+            ids=[0, 2, 4, 5, 7],
+        )
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # In patch0: local = [0,2,4]; removed = [1,3]; shifts = [0,1,2]
+        # So [0,2,4] becomes [0,1,2]
+
+        # New bases: [0,3] so patch1 base is 3 (not 5)
+
+        # In patch 1: locals = [0,2]
+        # So [5,7] becomes [3,5]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2, 3, 5]))
+
+    def _rebase_when_first_channel_grows(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [], "added_ids": [5, 6]},  # grow by 2
+                "patch1": {"removed_ids": [], "added_ids": []},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug",
+            sizes=[("patch0", 5), ("patch1", 4)],
+            ids=[0, 4, 5, 6, 8],
+        )
+        out = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # In patch0: local = [0,4]; added = [5,6]; No shifts
+        # So [0,4] becomes [0,4]
+
+        # New bases: [0,7]
+
+        # In patch 1: locals = [0,2,4]
+        # So [0,1,3] becomes [7,8,10]
+        np.testing.assert_array_equal(out.hypotheses_ids, np.array([0, 4, 7, 8, 10]))
+
+    def _all_ids_removed_in_a_channel(self, updater):
+        updater.resampling_telemetry = {
+            "mug": {
+                "patch0": {"removed_ids": [0, 1, 2], "added_ids": []},
+                "patch1": {"removed_ids": [], "added_ids": []},
+            }
+        }
+        hyp_ids = make_consistent_ids(
+            graph_id="mug", sizes=[("patch0", 3), ("patch1", 3)], ids=[0, 1, 2, 3, 4, 5]
+        )
+        hyp_ids = updater.remap_hypotheses_ids_to_present(hyp_ids)
+
+        # Removed [0, 1, 2], so [3, 4, 5] was rebased to [0, 1, 2]
+        np.testing.assert_array_equal(hyp_ids.hypotheses_ids, np.array([0, 1, 2]))
+
+    def test_remap_hypotheses_ids(self):
+        updater = self.get_resampling_updater()
+
+        self._single_channel_no_changes(updater)
+        self._single_channel_with_removals_shifts(updater)
+        self._single_channel_full_remap_misses_added(updater)
+        self._multi_channel_rebase_due_to_resizing(updater)
+        self._rebase_when_first_channel_shrinks(updater)
+        self._rebase_when_first_channel_grows(updater)
+        self._all_ids_removed_in_a_channel(updater)
