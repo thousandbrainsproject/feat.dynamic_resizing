@@ -35,7 +35,10 @@ from tbp.monty.frameworks.models.evidence_matching.hypotheses_displacer import (
     DefaultHypothesesDisplacer,
     HypothesisDisplacerTelemetry,
 )
-from tbp.monty.frameworks.utils.evidence_matching import ChannelMapper
+from tbp.monty.frameworks.utils.evidence_matching import (
+    ChannelMapper,
+    ConsistentHypothesesIds,
+)
 from tbp.monty.frameworks.utils.graph_matching_utils import (
     get_initial_possible_poses,
     possible_sensed_directions,
@@ -56,6 +59,18 @@ class ChannelHypothesesUpdateTelemetry:
 
 
 class HypothesesUpdater(Protocol):
+    def pre_step(self) -> None:
+        """Runs once per step before updating the hypotheses."""
+        ...
+
+    def post_step(self) -> None:
+        """Runs once per step after updating the hypotheses."""
+        ...
+
+    def reset(self) -> None:
+        """Resets updater at the beginning of an episode."""
+        ...
+
     def update_hypotheses(
         self,
         hypotheses: Hypotheses,
@@ -78,6 +93,19 @@ class HypothesesUpdater(Protocol):
 
         Returns:
             The list of channel hypotheses updates to be applied.
+        """
+        ...
+
+    def remap_hypotheses_ids_to_present(
+        self, hypotheses_ids: ConsistentHypothesesIds
+    ) -> ConsistentHypothesesIds:
+        """Update hypotheses ids based on resizing of hypothesis space.
+
+        Args:
+            hypotheses_ids: Hypotheses ids to be updated
+
+        Returns:
+            The list of the updated hypotheses ids.
         """
         ...
 
@@ -182,6 +210,18 @@ class DefaultHypothesesUpdater(HypothesesUpdater):
             tolerances=self.tolerances,
             use_features_for_matching=self.use_features_for_matching,
         )
+
+    def pre_step(self) -> None:
+        """Runs once per step before updating the hypotheses."""
+        ...
+
+    def post_step(self) -> None:
+        """Runs once per step after updating the hypotheses."""
+        ...
+
+    def reset(self) -> None:
+        """Resets updater at the beginning of an episode."""
+        ...
 
     def update_hypotheses(
         self,
@@ -402,6 +442,22 @@ class DefaultHypothesesUpdater(HypothesesUpdater):
             locations=initial_possible_channel_locations,
             poses=initial_possible_channel_rotations,
         )
+
+    def remap_hypotheses_ids_to_present(
+        self, hypotheses_ids: ConsistentHypothesesIds
+    ) -> ConsistentHypothesesIds:
+        """Update hypotheses ids based on resizing of hypothesis space.
+
+        We do not resize the hypotheses space when using `DefaultHypothesesUpdater`,
+        therefore, we return the same ids without update.
+
+        Args:
+            hypotheses_ids: Hypotheses ids to be updated
+
+        Returns:
+            The list of the updated hypotheses ids.
+        """
+        return hypotheses_ids
 
 
 def all_usable_input_channels(
