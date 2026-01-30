@@ -128,9 +128,9 @@ class ResamplingHypothesesUpdater:
             DefaultFeaturesForMatchingSelector
         ),
         sampling_multiplier: float = 0.4,
-        deletion_trigger_slope: float = 0.5,
+        deletion_trigger_slope: float = 0.0,
         sampling_burst_duration: int = 5,
-        burst_trigger_slope: float = 1.0,
+        burst_trigger_slope: float = 0.0,
         include_telemetry: bool = False,
         initial_possible_poses: Literal["uniform", "informed"]
         | list[Rotation] = "informed",

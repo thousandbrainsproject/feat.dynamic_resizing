@@ -1,5 +1,5 @@
 learning_module_0:
-  learning_module_class: ${monty.class:tbp.monty.frameworks.models.evidence_matching.learning_module.EvidenceGraphLM}
+  learning_module_class: ${monty.class:tbp.monty.frameworks.models.mixins.no_reset_evidence.TheoreticalLimitEvidenceGraphLM}
   learning_module_args:
     max_match_distance: 0.001
     tolerances:

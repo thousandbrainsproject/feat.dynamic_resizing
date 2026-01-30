@@ -338,6 +338,7 @@ def generate_parallel_train_configs(experiment: DictConfig, name: str) -> list[M
     sampler = hydra.utils.instantiate(
         experiment.config["train_env_interface_args"]["object_init_sampler"]
     )
+    sampler.rotations = sampler.rotations[:1]
     object_names = experiment.config["train_env_interface_args"]["object_names"]
     new_experiments = []
 
